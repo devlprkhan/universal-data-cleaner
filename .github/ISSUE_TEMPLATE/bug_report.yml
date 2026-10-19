@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem with data cleaning behavior.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please include a minimal reproducible example.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include a small DataFrame and the code that reproduces the issue.
+      render: python
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: package, pandas, numpy, scikit-learn, Python
+      placeholder: "universal-data-cleaner 2.0.0, pandas 3.0.6, numpy 2.5.4, scikit-learn 1.9.1, Python 3.13"
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Traceback
+      description: Paste the full traceback if there is one.
+      render: text
+    validations:
+      required: false
