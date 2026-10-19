@@ -36,6 +36,10 @@ breaks at inference time because the median is recomputed on the new batch.
 - optional missing-value indicator columns
 - optional constant-column dropping
 - stable output schema and column order
+- declarative column contracts (roles, allowed values, ranges, patterns, uniqueness)
+- automatic train-schema contract inference and transform-time drift reports
+- `on_drift` policy: `raise`, `warn`, or `ignore`
+- identifier columns that are never numeric-coerced, median-imputed, or capped
 - joblib save / load with artifact versioning
 - scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility
 
@@ -144,6 +148,68 @@ cleaner.save("artifacts/data_cleaner.joblib")
 restored = DataCleaner.load("artifacts/data_cleaner.joblib")
 ```
 
+## Column contracts and drift detection
+
+A contract makes the assumptions about your data explicit and checks them again
+on every batch.
+
+```python
+from data_cleaner import ColumnSpec, DataContract, CleanerConfig, DataCleaner
+
+contract = DataContract(
+    columns=[
+        ColumnSpec("customer_id", role="id"),
+        ColumnSpec("age", role="numeric", min_value=0, max_value=120),
+        ColumnSpec("plan", role="category", allowed_values=("free", "pro", "team")),
+    ],
+)
+
+cleaner = DataCleaner(
+    CleanerConfig(contract=contract, on_drift="warn")
+).fit(X_train)
+
+X_test_clean = cleaner.transform(X_test)   # drift is detected, never mutates
+print(cleaner.drift_report())
+```
+
+If you do not pass a contract, a conservative one is inferred from the training
+schema automatically. Drift is then reported without any configuration:
+
+```python
+cleaner = DataCleaner().fit(X_train)
+cleaner.transform(X_test)
+report = cleaner.drift_report()
+
+if not report.empty:
+    print(report[["column", "check", "severity", "message"]])
+```
+
+Supported drift checks: `missing_column`, `unexpected_column`, `dtype_change`,
+`unexpected_missing`, `unexpected_category`, `value_out_of_range`,
+`pattern_mismatch`, and `duplicate_values`.
+
+Control what happens when drift is found with `CleanerConfig.on_drift`:
+
+| `on_drift` | Behavior |
+| --- | --- |
+| `"warn"` (default) | Log the drift report and continue |
+| `"raise"` | Raise `ValueError` when any error-severity finding exists |
+| `"ignore"` | Record findings in `drift_report()` without logging |
+
+`role="id"` is worth calling out: identifier columns are treated as text, never
+numeric-imputed, never outlier-capped, and rendered without a trailing `.0`.
+Use `role="ignore"` to drop operational columns from the output.
+
+Contracts can be version-controlled and shared between training and serving:
+
+```python
+contract.to_json()                       # store it with the model artifact
+restored = DataContract.from_json(payload)
+
+# Optional YAML support requires `pip install pyyaml`
+# restored = DataContract.from_yaml(contract.to_yaml())
+```
+
 ## scikit-learn Pipeline
 
 ```python
@@ -181,7 +247,12 @@ predictions = pipeline.predict(X_test)
 | Name | Purpose |
 | --- | --- |
 | `CleanerConfig` | Validated cleaning configuration |
-| `DataCleaner` | Fit/transform cleaner with save/load |
+| `DataCleaner` | Fit/transform cleaner with save/load and drift reporting |
+| `ColumnSpec` | Declarative expectations and semantics for one column |
+| `DataContract` | A set of column specs, with inference and (de)serialization |
+| `DriftReport` | Findings from a contract check, with a Markdown summary |
+| `DataCleaner.drift_report()` | Drift findings from the last `transform` |
+| `DataCleaner.fitted_contract()` | The contract used by the fitted cleaner |
 | `profile_dataframe` | Column-level missing/type/cardinality profile |
 | `dataset_summary` | Row/column/missing/duplicate summary |
 | `drop_duplicate_rows` | Explicit duplicate removal helper |
@@ -191,6 +262,10 @@ predictions = pipeline.predict(X_test)
 
 - Fit the cleaner **after** splitting and **only** on training data.
 - Do not pass IDs, free-text notes, or the target column to the cleaner.
+- Mark identifier columns with `ColumnSpec(..., role="id")` so they are never
+  treated as numeric measurements.
+- Set `on_drift="raise"` in production when an unexpected schema change should
+  stop the job instead of silently cleaning it.
 - Keep `DataSource`-style constant columns out of the model, or let
   `drop_constant_columns=True` remove them.
 - `unseen_category="keep"` is the default because one-hot encoders with
@@ -210,6 +285,7 @@ predictions = pipeline.predict(X_test)
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
 ├── README.md
+├── ROADMAP.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md

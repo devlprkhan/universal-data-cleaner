@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universal-data-cleaner"
-version = "2.0.0"
+version = "2.1.0"
 description = "Production-ready, scikit-learn-compatible data cleaning transformer for pandas."
 readme = "README.md"
 license = "MIT"

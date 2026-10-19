@@ -14,7 +14,10 @@ from sklearn.preprocessing import OneHotEncoder
 
 from data_cleaner import (
     CleanerConfig,
+    ColumnSpec,
     DataCleaner,
+    DataContract,
+    DriftReport,
     assert_frame_clean,
     dataset_summary,
     drop_duplicate_rows,
@@ -189,6 +192,107 @@ class DataCleanerTests(unittest.TestCase):
         self.assertEqual(summary["columns"], self.features.shape[1])
         self.assertEqual(removed, 3)
         self.assertEqual(len(deduplicated), len(self.features))
+
+
+class ContractTests(unittest.TestCase):
+    def test_inferred_contract_reports_extra_column(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": ["x", "y", "x"]})
+        cleaner = DataCleaner(CleanerConfig()).fit(frame)
+        self.assertIsNotNone(cleaner.fitted_contract())
+        cleaner.transform(frame.assign(extra="e"))
+        report = cleaner.drift_report()
+        self.assertIn("unexpected_column", set(report["check"]))
+
+    def test_id_role_is_not_numeric_imputed_or_capped(self) -> None:
+        frame = pd.DataFrame(
+            {"customer_id": [1001, 1002, 9_999_999], "amount": [10.0, 20.0, 30.0]}
+        )
+        contract = DataContract(columns=(ColumnSpec("customer_id", role="id"),))
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        self.assertNotIn("customer_id", cleaner.numeric_columns_)
+
+        out = cleaner.transform(frame)
+        self.assertEqual(set(out["customer_id"]), {"1001", "1002", "9999999"})
+        self.assertTrue(
+            out["customer_id"].map(lambda value: isinstance(value, str)).all()
+        )
+        self.assertTrue(cleaner.drift_report().empty)
+
+        probe = frame.copy()
+        probe.loc[0, "customer_id"] = None
+        transformed = cleaner.transform(probe)
+        self.assertEqual(transformed.loc[0, "customer_id"], "Unknown")
+
+    def test_ignore_role_drops_column(self) -> None:
+        frame = pd.DataFrame({"keep": [1.0, 2.0], "meta": ["a", "b"]})
+        contract = DataContract(columns=(ColumnSpec("meta", role="ignore"),))
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        self.assertNotIn("meta", list(cleaner.get_feature_names_out()))
+        out = cleaner.transform(frame.drop(columns=["meta"]))
+        self.assertNotIn("meta", out.columns)
+
+    def test_unexpected_category_is_reported(self) -> None:
+        frame = pd.DataFrame({"plan": ["free", "pro", "free"]})
+        contract = DataContract(
+            columns=(
+                ColumnSpec("plan", role="category", allowed_values=("free", "pro")),
+            )
+        )
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        probe = pd.DataFrame({"plan": ["free", "pro", "enterprise"]})
+        cleaner.transform(probe)  # default on_drift="warn" must not raise
+        report = cleaner.drift_report()
+        self.assertIn("unexpected_category", set(report["check"]))
+
+    def test_on_drift_raise_for_range_violation(self) -> None:
+        frame = pd.DataFrame({"age": [10.0, 20.0, 30.0]})
+        contract = DataContract(
+            columns=(ColumnSpec("age", role="numeric", min_value=0, max_value=120),)
+        )
+        cleaner = DataCleaner(
+            CleanerConfig(contract=contract, on_drift="raise")
+        ).fit(frame)
+        with self.assertRaises(ValueError):
+            cleaner.transform(pd.DataFrame({"age": [10.0, 500.0]}))
+
+    def test_on_drift_ignore_does_not_raise(self) -> None:
+        frame = pd.DataFrame({"age": [10.0, 20.0, 30.0]})
+        contract = DataContract(
+            columns=(ColumnSpec("age", role="numeric", min_value=0, max_value=120),)
+        )
+        cleaner = DataCleaner(
+            CleanerConfig(contract=contract, on_drift="ignore")
+        ).fit(frame)
+        out = cleaner.transform(pd.DataFrame({"age": [500.0]}))
+        self.assertEqual(len(out), 1)
+        self.assertGreaterEqual(cleaner.drift_report().shape[0], 1)
+
+    def test_contract_serialization_roundtrip(self) -> None:
+        contract = DataContract(
+            columns=(
+                ColumnSpec("id", role="id", preserve_leading_zeros=True),
+                ColumnSpec("age", role="numeric", min_value=0, max_value=120),
+                ColumnSpec("plan", role="category", allowed_values=("free", "pro")),
+            ),
+            strict=True,
+        )
+        restored = DataContract.from_json(contract.to_json())
+        self.assertEqual(restored.to_dict(), contract.to_dict())
+        self.assertTrue(restored.strict)
+        self.assertEqual(restored.spec_for("age").role, "numeric")  # type: ignore[union-attr]
+
+    def test_invalid_spec_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            ColumnSpec("x", role="not-a-role")
+        with self.assertRaises(ValueError):
+            ColumnSpec("x", pattern="[unclosed")
+
+    def test_missing_column_still_raises_with_drift_details(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+        cleaner = DataCleaner(CleanerConfig()).fit(frame)
+        with self.assertRaises(ValueError) as ctx:
+            cleaner.transform(frame.drop(columns=["b"]))
+        self.assertIn("missing required columns", str(ctx.exception))
 
 
 if __name__ == "__main__":
