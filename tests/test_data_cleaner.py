@@ -3,26 +3,25 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.base import clone
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
-
 from data_cleaner import (
     CleanerConfig,
     ColumnSpec,
     DataCleaner,
     DataContract,
-    DriftReport,
     assert_frame_clean,
     dataset_summary,
     drop_duplicate_rows,
     profile_dataframe,
 )
+from sklearn.base import clone
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 
 def sample_data(seed: int = 7) -> pd.DataFrame:
@@ -35,12 +34,7 @@ def sample_data(seed: int = 7) -> pd.DataFrame:
     signup = pd.to_datetime("2023-01-01") + pd.to_timedelta(
         rng.integers(0, 365, rows), unit="D"
     )
-    target = (
-        50
-        + 0.2 * (age - 40)
-        + 0.08 * (experience - 10)
-        + rng.normal(0, 3, rows)
-    )
+    target = 50 + 0.2 * (age - 40) + 0.08 * (experience - 10) + rng.normal(0, 3, rows)
     frame = pd.DataFrame(
         {
             "Age": age,
@@ -64,14 +58,15 @@ def sample_data(seed: int = 7) -> pd.DataFrame:
     frame.loc[3, "Department"] = "Legal"
     return frame
 
+
 class DataCleanerTests(unittest.TestCase):
     def setUp(self) -> None:
         frame = sample_data()
         self.features = frame.drop(columns=["Target"])
         self.target = frame["Target"]
 
-    def config(self, **kwargs) -> CleanerConfig:
-        defaults = {
+    def config(self, **kwargs: Any) -> CleanerConfig:
+        defaults: dict[str, Any] = {
             "numeric_columns": ("Salary",),
             "datetime_columns": ("SignupDate",),
             "add_missing_indicators": True,
@@ -148,7 +143,7 @@ class DataCleanerTests(unittest.TestCase):
         cloned = clone(cleaner)
         self.assertEqual(cloned.config, cleaner.config)
 
-        numeric = [c for c in cloned.config.numeric_columns]
+        numeric = list(cloned.config.numeric_columns)
         categorical = ["Department"]
         boolean = ["IsActive"]
         pipeline = Pipeline(
@@ -249,9 +244,9 @@ class ContractTests(unittest.TestCase):
         contract = DataContract(
             columns=(ColumnSpec("age", role="numeric", min_value=0, max_value=120),)
         )
-        cleaner = DataCleaner(
-            CleanerConfig(contract=contract, on_drift="raise")
-        ).fit(frame)
+        cleaner = DataCleaner(CleanerConfig(contract=contract, on_drift="raise")).fit(
+            frame
+        )
         with self.assertRaises(ValueError):
             cleaner.transform(pd.DataFrame({"age": [10.0, 500.0]}))
 
@@ -260,9 +255,9 @@ class ContractTests(unittest.TestCase):
         contract = DataContract(
             columns=(ColumnSpec("age", role="numeric", min_value=0, max_value=120),)
         )
-        cleaner = DataCleaner(
-            CleanerConfig(contract=contract, on_drift="ignore")
-        ).fit(frame)
+        cleaner = DataCleaner(CleanerConfig(contract=contract, on_drift="ignore")).fit(
+            frame
+        )
         out = cleaner.transform(pd.DataFrame({"age": [500.0]}))
         self.assertEqual(len(out), 1)
         self.assertGreaterEqual(cleaner.drift_report().shape[0], 1)

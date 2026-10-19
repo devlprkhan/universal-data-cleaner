@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import joblib
 import numpy as np
@@ -151,7 +151,7 @@ def _series_kind(series: pd.Series) -> str:
     return "categorical"
 
 
-def _stringify_identifier(value: object) -> object:
+def _stringify_identifier(value: Any) -> object:
     """Render an identifier without a trailing ``.0`` while preserving NaN."""
     if value is None:
         return value
@@ -223,9 +223,7 @@ class ColumnSpec:
             "nullable": self.nullable,
             "unique": self.unique,
             "allowed_values": (
-                list(self.allowed_values)
-                if self.allowed_values is not None
-                else None
+                list(self.allowed_values) if self.allowed_values is not None else None
             ),
             "min_value": self.min_value,
             "max_value": self.max_value,
@@ -236,7 +234,7 @@ class ColumnSpec:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "ColumnSpec":
+    def from_dict(cls, data: dict[str, object]) -> ColumnSpec:
         """Rebuild a spec from :meth:`to_dict` output."""
         return cls(**data)  # type: ignore[arg-type]
 
@@ -248,7 +246,7 @@ class DriftReport:
     findings: pd.DataFrame
 
     @classmethod
-    def empty(cls) -> "DriftReport":
+    def empty(cls) -> DriftReport:
         return cls(pd.DataFrame(columns=_DRIFT_COLUMNS))
 
     @property
@@ -323,7 +321,7 @@ class CleanerConfig:
         "is_weekend",
     )
     unseen_category: Literal["keep", "fill"] = "keep"
-    contract: "DataContract | None" = None
+    contract: DataContract | None = None
     on_drift: Literal["raise", "warn", "ignore"] = "warn"
     infer_contract: bool = True
     verbose: bool = True
@@ -342,9 +340,7 @@ class CleanerConfig:
                 "numeric_imputation must be one of: median, mean, constant"
             )
         if self.categorical_imputation not in {"mode", "constant"}:
-            raise ValueError(
-                "categorical_imputation must be one of: mode, constant"
-            )
+            raise ValueError("categorical_imputation must be one of: mode, constant")
         if self.outlier_multiplier <= 0:
             raise ValueError("outlier_multiplier must be > 0")
         if self.unseen_category not in {"keep", "fill"}:
@@ -352,9 +348,7 @@ class CleanerConfig:
         if self.on_drift not in {"raise", "warn", "ignore"}:
             raise ValueError("on_drift must be one of: raise, warn, ignore")
         if self.contract is not None and not isinstance(self.contract, DataContract):
-            raise TypeError(
-                "contract must be a DataContract instance or None"
-            )
+            raise TypeError("contract must be a DataContract instance or None")
         if not self.datetime_features:
             raise ValueError("datetime_features cannot be empty")
         if len(set(self.datetime_features)) != len(self.datetime_features):
@@ -394,8 +388,6 @@ class DataContract:
         for item in self.columns:
             if isinstance(item, ColumnSpec):
                 coerced.append(item)
-            elif isinstance(item, dict):
-                coerced.append(ColumnSpec.from_dict(item))
             else:
                 raise TypeError(
                     "DataContract.columns must contain ColumnSpec instances"
@@ -417,9 +409,9 @@ class DataContract:
     def infer_from(
         cls,
         frame: pd.DataFrame,
-        config: "CleanerConfig | None" = None,
+        config: CleanerConfig | None = None,
         strict: bool = True,
-    ) -> "DataContract":
+    ) -> DataContract:
         """Infer a conservative contract from a training frame."""
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("frame must be a pandas DataFrame")
@@ -613,12 +605,14 @@ class DataContract:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "DataContract":
+    def from_dict(cls, data: dict[str, object]) -> DataContract:
         """Rebuild a contract from :meth:`to_dict` output."""
-        raw = data.get("columns", ())
+        raw = data.get("columns") or ()
+        if not isinstance(raw, (list, tuple)):
+            raise TypeError("contract 'columns' must be a list or tuple")
         columns = tuple(
             ColumnSpec.from_dict(item) if isinstance(item, dict) else item
-            for item in raw  # type: ignore[union-attr]
+            for item in raw
         )
         return cls(columns=columns, strict=bool(data.get("strict", False)))
 
@@ -627,26 +621,26 @@ class DataContract:
         return json.dumps(self.to_dict(), **kwargs)  # type: ignore[arg-type]
 
     @classmethod
-    def from_json(cls, text: str) -> "DataContract":
+    def from_json(cls, text: str) -> DataContract:
         """Parse a contract from JSON."""
         return cls.from_dict(json.loads(text))
 
     def to_yaml(self) -> str:
         """Serialize to YAML (requires the optional ``pyyaml`` package)."""
         try:
-            import yaml  # noqa: PLC0415
+            import yaml
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ImportError(
                 "PyYAML is required for YAML contracts. Install it with "
                 "`pip install pyyaml` or use to_json()/from_json()."
             ) from exc
-        return yaml.safe_dump(self.to_dict(), sort_keys=False)  # type: ignore[no-any-return]
+        return yaml.safe_dump(self.to_dict(), sort_keys=False)
 
     @classmethod
-    def from_yaml(cls, text: str) -> "DataContract":
+    def from_yaml(cls, text: str) -> DataContract:
         """Parse YAML (requires the optional ``pyyaml`` package)."""
         try:
-            import yaml  # noqa: PLC0415
+            import yaml
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ImportError(
                 "PyYAML is required for YAML contracts. Install it with "
@@ -666,7 +660,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
     def __init__(self, config: CleanerConfig | None = None) -> None:
         self.config = config if config is not None else CleanerConfig()
 
-    def fit(self, X: pd.DataFrame, y: object | None = None) -> "DataCleaner":
+    def fit(self, X: pd.DataFrame, y: object | None = None) -> DataCleaner:
         """Learn cleaning rules from training data."""
         frame = self._validate_frame(X, required=None, allow_empty=False)
         self.contract_ = self._resolve_contract(frame)
@@ -704,7 +698,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             column for column, role in roles.items() if role == "categorical"
         ]
 
-        self.fill_values_: dict[str, object] = {}
+        self.fill_values_: dict[str, Any] = {}
         self.outlier_bounds_: dict[str, tuple[float, float]] = {}
         self.outlier_counts_: dict[str, int] = {}
         self.outlier_quartiles_: dict[str, tuple[float, float]] = {}
@@ -794,29 +788,35 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         prepared, missing_flags, _ = self._prepare_frame(frame, self.roles_)
 
         for column in self.numeric_columns_:
-            series = prepared[column].astype("float64")
+            numeric_series = prepared[column].astype("float64")
             fill = self.fill_values_[column]
             lower, upper = self.outlier_bounds_[column]
             prepared[column] = (
-                series.fillna(fill).clip(lower=lower, upper=upper).astype("float64")
+                numeric_series.fillna(fill)
+                .clip(lower=lower, upper=upper)
+                .astype("float64")
             )
 
         for column in self.boolean_columns_:
-            series = prepared[column].astype("boolean")
-            prepared[column] = (
-                series.fillna(self.fill_values_[column]).astype(bool)
+            boolean_series = prepared[column].astype("boolean")
+            prepared[column] = boolean_series.fillna(self.fill_values_[column]).astype(
+                bool
             )
 
         for column in self.categorical_columns_:
-            series = prepared[column].astype(object)
+            categorical_series = prepared[column].astype(object)
             fill = self.fill_values_[column]
             protected = column in self.id_columns_ or column in self.text_columns_
             if self.config.unseen_category == "fill" and not protected:
                 known = self.known_categories_.get(column)
                 if known is not None:
-                    unseen = series.notna() & ~series.isin(known)
-                    series = series.mask(unseen, self.config.categorical_fill_value)
-            prepared[column] = series.fillna(fill).astype(object)
+                    unseen = categorical_series.notna() & ~categorical_series.isin(
+                        known
+                    )
+                    categorical_series = categorical_series.mask(
+                        unseen, self.config.categorical_fill_value
+                    )
+            prepared[column] = categorical_series.fillna(fill).astype(object)
 
         for source, indicator in self.indicator_columns_.items():
             prepared[indicator] = missing_flags[source].astype(bool)
@@ -833,9 +833,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             )
         return prepared.reindex(columns=self.columns_)
 
-    def fit_transform(
-        self, X: pd.DataFrame, y: object | None = None
-    ) -> pd.DataFrame:
+    def fit_transform(self, X: pd.DataFrame, y: object | None = None) -> pd.DataFrame:
         """Fit on ``X`` and return the cleaned training DataFrame."""
         return self.fit(X, y).transform(X)
 
@@ -847,9 +845,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         if input_features is not None and list(input_features) != list(
             self.feature_names_in_
         ):
-            raise ValueError(
-                "input_features must match the columns seen during fit"
-            )
+            raise ValueError("input_features must match the columns seen during fit")
         return np.asarray(self.columns_, dtype=object)
 
     def cleaning_summary(self) -> pd.DataFrame:
@@ -884,12 +880,12 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self._ensure_fitted()
         return self.drift_report_.copy()
 
-    def fitted_contract(self) -> "DataContract | None":
+    def fitted_contract(self) -> DataContract | None:
         """Return the contract used by this fitted cleaner."""
         self._ensure_fitted()
         return self.contract_
 
-    def _resolve_contract(self, frame: pd.DataFrame) -> "DataContract | None":
+    def _resolve_contract(self, frame: pd.DataFrame) -> DataContract | None:
         if self.config.contract is not None:
             return self.config.contract
         if not self.config.infer_contract:
@@ -943,7 +939,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         return target
 
     @classmethod
-    def load(cls, path: str | Path, verify_version: bool = True) -> "DataCleaner":
+    def load(cls, path: str | Path, verify_version: bool = True) -> DataCleaner:
         """Load a saved cleaner artifact."""
         payload = joblib.load(Path(path))
         if not isinstance(payload, dict) or "cleaner" not in payload:
@@ -1002,9 +998,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         )
         missing = [column for column in configured if column not in frame.columns]
         if missing:
-            raise ValueError(
-                f"Configured columns not found in DataFrame: {missing}"
-            )
+            raise ValueError(f"Configured columns not found in DataFrame: {missing}")
 
         roles: dict[str, str] = {}
         for column in frame.columns:
@@ -1057,10 +1051,12 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         return numeric.replace([np.inf, -np.inf], np.nan)
 
     @staticmethod
-    def _as_float(values: object) -> pd.Series:
+    def _as_float(values: pd.Series) -> pd.Series:
         return pd.to_numeric(values, errors="coerce").astype("float64")
 
-    def _extract_datetime_features(self, parsed: pd.Series, source: str) -> pd.DataFrame:
+    def _extract_datetime_features(
+        self, parsed: pd.Series, source: str
+    ) -> pd.DataFrame:
         features: dict[str, pd.Series] = {}
         for feature in self.config.datetime_features:
             if feature == "year":
@@ -1137,9 +1133,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
 
         return pd.DataFrame(prepared, index=frame.index), missing_flags, generated
 
-    def _fit_numeric(
-        self, prepared: pd.DataFrame, roles: dict[str, str]
-    ) -> None:
+    def _fit_numeric(self, prepared: pd.DataFrame, roles: dict[str, str]) -> None:
         cfg = self.config
         for column in self.numeric_columns_:
             series = prepared[column].astype("float64")
@@ -1162,9 +1156,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             q1 = q3 = np.nan
             outliers = 0
             should_cap = (
-                cfg.cap_outliers
-                and roles.get(column) == "numeric"
-                and not valid.empty
+                cfg.cap_outliers and roles.get(column) == "numeric" and not valid.empty
             )
             if should_cap:
                 q1 = float(valid.quantile(0.25))
@@ -1313,7 +1305,9 @@ def profile_dataframe(frame: pd.DataFrame, name: str = "dataset") -> pd.DataFram
                 "dtype": str(series.dtype),
                 "non_null": non_null,
                 "missing": missing,
-                "missing_pct": round((missing / row_count * 100) if row_count else 0.0, 2),
+                "missing_pct": round(
+                    (missing / row_count * 100) if row_count else 0.0, 2
+                ),
                 "unique": int(series.nunique(dropna=True)),
                 "top": mode_values.iloc[0] if not mode_values.empty else None,
                 "top_freq": int(series.eq(mode_values.iloc[0]).sum())
@@ -1346,7 +1340,7 @@ def dataset_summary(frame: pd.DataFrame) -> dict[str, object]:
 def drop_duplicate_rows(
     frame: pd.DataFrame,
     subset: list[str] | None = None,
-    keep: str = "first",
+    keep: Literal["first", "last"] = "first",
 ) -> tuple[pd.DataFrame, int]:
     """Drop exact duplicates and return ``(deduplicated_frame, rows_removed)``."""
     if not isinstance(frame, pd.DataFrame):

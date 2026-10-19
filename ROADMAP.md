@@ -102,12 +102,12 @@ contract = DataContract(
         ColumnSpec("signup_date", role="datetime", date_format="%Y-%m-%d"),
         ColumnSpec("plan", role="category", allowed_values=("free", "pro", "team")),
     ],
-    on_drift="warn",   # raise | warn | coerce | ignore
+    on_drift="warn",  # raise | warn | coerce | ignore
 )
 
 cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(X_train)
-X_test_clean = cleaner.transform(X_test)      # drift checked, never mutates
-report = cleaner.drift_report()               # DataFrame of every difference found
+X_test_clean = cleaner.transform(X_test)  # drift checked, never mutates
+report = cleaner.drift_report()  # DataFrame of every difference found
 ```
 
 Deliverables:
@@ -134,9 +134,9 @@ trustworthy validation and ML audits.
 *Targets pain #8, #5, #6 and root cause 4.*
 
 ```python
-cleaner.decision_log()           # DataFrame: column, action, reason, source, before, after
-cleaner.to_manifest()            # JSON-serializable dict
-cleaner.fingerprint(X)           # stable hash of schema + stats
+cleaner.decision_log()  # DataFrame: column, action, reason, source, before, after
+cleaner.to_manifest()  # JSON-serializable dict
+cleaner.fingerprint(X)  # stable hash of schema + stats
 manifest = cleaner.artifact_manifest()
 ```
 
@@ -162,12 +162,13 @@ it makes the Tier 1 drift reports trustworthy over time.
 from data_cleaner import diagnose_join, check_referential_integrity
 
 report = diagnose_join(orders, customers, on="customer_id", how="left")
-report.safe            # False
+report.safe  # False
 report.row_multiplier  # 3.7
-report.unmatched_right # 412
-report.warnings        # ["right key is not unique (m:m join)"]
+report.unmatched_right  # 412
+report.warnings  # ["right key is not unique (m:m join)"]
 
 from data_cleaner import Contract
+
 result = Contract.from_frame(orders).validate(orders_new)
 result.failures.to_markdown()
 ```
@@ -193,11 +194,16 @@ functions deliver most of the value without changing the transformer core.
 
 ```python
 audit = audit_split(
-    X_train, X_test, y_train, y_test,
-    groups=groups, time_col="event_time", id_cols=["customer_id"],
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    groups=groups,
+    time_col="event_time",
+    id_cols=["customer_id"],
 )
-audit.summary()          # DataFrame of findings + severity
-audit.raise_if_invalid() # optional
+audit.summary()  # DataFrame of findings + severity
+audit.raise_if_invalid()  # optional
 ```
 
 Deliverables:
