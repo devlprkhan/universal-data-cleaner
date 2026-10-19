@@ -129,7 +129,7 @@ Why first: it is the clearest unmet need in the research, it is the natural
 extension of what `DataCleaner` already learns, and it is a prerequisite for
 trustworthy validation and ML audits.
 
-### Tier 2 — `v2.2.0`: Auditable decisions and reproducible artifacts
+### Tier 2 — `v2.3.0`: Auditable decisions and reproducible artifacts
 
 *Targets pain #8, #5, #6 and root cause 4.*
 
@@ -154,7 +154,7 @@ Deliverables:
 Why second: reproducibility is the other high-confidence, high-fit problem, and
 it makes the Tier 1 drift reports trustworthy over time.
 
-### Tier 3 — `v2.3.0`: Validation and integration diagnostics
+### Tier 3 — `v2.4.0`: Validation and integration diagnostics
 
 *Targets pain #2, #3.*
 
@@ -188,7 +188,7 @@ Deliverables (pure functions, no fitting):
 Why here: these problems are severe but mostly *diagnostic*, so pure helper
 functions deliver most of the value without changing the transformer core.
 
-### Tier 4 — `v2.4.0`: ML validity audit
+### Tier 4 — `v2.5.0`: ML validity audit
 
 *Targets pain #4.*
 
@@ -220,7 +220,7 @@ Why fourth: high severity for ML users, but it is an audit on top of the
 cleaner rather than part of it. Safer to ship after the contract/drift core is
 solid.
 
-### Tier 5 — `v2.5.0`: Safe ingestion
+### Tier 5 — `v2.6.0`: Safe ingestion
 
 *Targets pain #1, #5, #9 (partially).*
 
@@ -249,35 +249,33 @@ to the existing transformer, so it should not gate the core value.
 
 ---
 
-## 5. Proposed package structure
+## 5. Package structure
 
-The single `data_cleaner.py` module is already 754 lines. Adding five tiers to
-it would make it unmaintainable. Move to a package while keeping the public
-import path stable.
+**Shipped in `v2.2.0`.** The single `data_cleaner.py` module was split into a
+typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker, while
+keeping the public import path and the pickled-artifact qualified name stable.
 
 ```text
 src/data_cleaner/
 ├── __init__.py        # public API re-exports (stable import path)
+├── _version.py        # __version__, artifact version
+├── _roles.py          # semantic roles, dtype/identifier helpers
+├── contract.py        # ColumnSpec, DataContract, DriftReport
 ├── config.py          # CleanerConfig
 ├── cleaner.py         # DataCleaner
-├── contract.py        # ColumnSpec, DataContract, SchemaDiff, DriftReport
-├── decisions.py       # CleaningDecision, decision log
-├── artifacts.py       # manifest, fingerprints, save/load
-├── validation.py      # expectation checks, ValidationReport
-├── integration.py     # join diagnostics, referential integrity, business keys
-├── ml_audit.py        # split / leakage audit
-├── ingestion.py       # read_csv_safe and friends
-└── profiling.py       # profile_dataframe, dataset_summary
+└── profiling.py       # profile_dataframe, dataset_summary, helpers
 ```
+
+Future tiers add modules alongside these, e.g. `decisions.py`, `artifacts.py`,
+`validation.py`, `integration.py`, `ml_audit.py`, and `ingestion.py`.
 
 Compatibility rules:
 
-- `import data_cleaner; data_cleaner.DataCleaner` must keep working.
-- Existing pickled artifacts reference `data_cleaner.DataCleaner`. Keep that
-  qualified name stable (re-export / alias) and add an artifact round-trip test
-  that loads a v2.0.0 artifact.
-- This is an internal change; public version can stay in the 2.x line, but if
-  any import path moves, ship as `3.0.0` with a migration note.
+- `import data_cleaner; data_cleaner.DataCleaner` keeps working.
+- Existing pickled artifacts reference `data_cleaner.DataCleaner`. That
+  qualified name stays stable, and a fixture test loads a real `v2.1.0`
+  artifact after the restructure.
+- The restructure stayed in the 2.x line because no public import path moved.
 
 ---
 
@@ -287,8 +285,8 @@ Compatibility rules:
   train, idempotent `transform`.
 - **Drift matrix**: for each contract field, construct a frame that violates it
   and assert the exact report entry and policy behavior.
-- **Artifact compatibility**: build a v2.0.0 cleaner fixture and load it after
-  the restructure.
+- **Artifact compatibility**: a committed `v2.1.0` cleaner fixture is loaded after
+  the package restructure to prove old artifacts still work.
 - **Pure-function correctness**: compare `diagnose_join` against hand-computed
   pandas cardinalities on 1:1, 1:m, m:m, empty, and all-unmatched cases.
 - **Property-based tests** (optional `hypothesis` dev dep) for dedup and
@@ -303,11 +301,12 @@ Compatibility rules:
 | Version | Scope | Breaking? |
 | --- | --- | --- |
 | `2.1.0` | Contracts + drift guard + id protection | No |
-| `2.2.0` | Decision log + manifest + fingerprints | No |
-| `2.3.0` | Validation + join/integration diagnostics | No |
-| `2.4.0` | ML split/leakage audit | No |
-| `2.5.0` | Safe ingestion | No |
-| `3.0.0` | Package restructure if required by import moves | Possibly |
+| `2.2.0` | Typed `src/` package, `py.typed`, CI quality gates | No |
+| `2.3.0` | Decision log + manifest + fingerprints | No |
+| `2.4.0` | Validation + join/integration diagnostics | No |
+| `2.5.0` | ML split/leakage audit | No |
+| `2.6.0` | Safe ingestion | No |
+| `3.0.0` | Any future breaking import move | Possibly |
 
 Each release: update `CHANGELOG.md`, bump `pyproject.toml`, push, create a
 GitHub release, let `publish.yml` handle PyPI.
@@ -324,11 +323,10 @@ GitHub release, let `publish.yml` handle PyPI.
 
 ---
 
-## 9. Recommended first step
+## 9. Current step
 
-Implement **Tier 1 (`v2.1.0`)**: `ColumnSpec`, `DataContract`, semantic roles,
-identifier protection, and the drift report wired into `transform()`.
+Tiers 1 (`v2.1.0`) and the typed package restructure (`v2.2.0`) are shipped.
 
-It directly attacks the highest-scored pain point, fits the library's existing
-architecture, preserves every leak-safety invariant, and creates the foundation
-that Tiers 2–4 build on.
+Implement **Tier 2 (`v2.3.0`)**: `CleaningDecision`, `decision_log()`, the
+artifact manifest, and data fingerprints. It makes the Tier 1 drift reports
+trustworthy over time and is a prerequisite for the validation and audit tiers.

@@ -7,6 +7,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+
 from data_cleaner import (
     CleanerConfig,
     ColumnSpec,
@@ -17,11 +23,8 @@ from data_cleaner import (
     drop_duplicate_rows,
     profile_dataframe,
 )
-from sklearn.base import clone
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def sample_data(seed: int = 7) -> pd.DataFrame:
@@ -288,6 +291,71 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             cleaner.transform(frame.drop(columns=["b"]))
         self.assertIn("missing required columns", str(ctx.exception))
+
+
+class PackageTests(unittest.TestCase):
+    """Guardrails for the packaged (multi-module) layout."""
+
+    def test_public_api_is_complete(self) -> None:
+        import data_cleaner
+
+        for name in (
+            "CleanerConfig",
+            "ColumnSpec",
+            "DataCleaner",
+            "DataContract",
+            "DriftReport",
+            "assert_frame_clean",
+            "dataset_summary",
+            "drop_duplicate_rows",
+            "profile_dataframe",
+        ):
+            self.assertTrue(hasattr(data_cleaner, name), name)
+        self.assertRegex(data_cleaner.__version__, r"^\d+\.\d+\.\d+")
+
+    def test_typed_marker_is_installed(self) -> None:
+        import data_cleaner
+
+        package_dir = Path(data_cleaner.__file__).parent
+        self.assertTrue((package_dir / "py.typed").is_file())
+
+    def test_loads_v2_1_0_artifact(self) -> None:
+        import data_cleaner
+
+        artifact = FIXTURES / "cleaner_v210.joblib"
+        self.assertTrue(artifact.is_file(), "missing v2.1.0 fixture")
+
+        with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+            cleaner = DataCleaner.load(artifact)
+        self.assertTrue(any("2.1.0" in line for line in logs.output))
+        self.assertNotEqual(data_cleaner.__version__, "2.1.0")
+
+        frame = pd.DataFrame(
+            {
+                "customer_id": [10, 11],
+                "age": [None, 41.0],
+                "city": ["NY", "BOS"],
+                "active": [True, False],
+                "joined": pd.to_datetime(["2022-05-01", "2023-02-14"]),
+            }
+        )
+        cleaned = cleaner.transform(frame)
+        assert_frame_clean(cleaned)
+        self.assertEqual(len(cleaned), len(frame))
+        self.assertEqual(
+            list(cleaned.columns),
+            [
+                "customer_id",
+                "age",
+                "city",
+                "active",
+                "joined__year",
+                "joined__month",
+                "joined__day",
+                "joined__dayofweek",
+            ],
+        )
+        self.assertFalse(cleaned["age"].isna().any())
 
 
 if __name__ == "__main__":

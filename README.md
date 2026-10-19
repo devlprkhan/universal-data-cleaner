@@ -277,11 +277,22 @@ predictions = pipeline.predict(X_test)
 
 ```text
 .
-├── data_cleaner.py                    # reusable library module
+├── src/data_cleaner/                  # typed, pip-installable package
+│   ├── __init__.py                    # public API re-exports
+│   ├── _version.py                    # version metadata
+│   ├── _roles.py                      # semantic roles and dtype helpers
+│   ├── contract.py                    # ColumnSpec / DataContract / DriftReport
+│   ├── config.py                      # CleanerConfig
+│   ├── cleaner.py                     # DataCleaner
+│   ├── profiling.py                   # profiling and validation helpers
+│   └── py.typed                       # PEP 561 marker
 ├── Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
-├── tests/test_data_cleaner.py         # unit and integration tests
+├── tests/
+│   ├── test_data_cleaner.py           # unit and integration tests
+│   └── fixtures/                      # stored artifacts for compatibility tests
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
+├── .pre-commit-config.yaml            # local lint/format/type hooks
 ├── README.md
 ├── ROADMAP.md
 ├── CHANGELOG.md
@@ -289,6 +300,10 @@ predictions = pipeline.predict(X_test)
 ├── SECURITY.md
 └── LICENSE
 ```
+
+The package ships a `py.typed` marker, so `mypy`, `pyright`, and IDE tooling
+pick up the type annotations automatically. Linting (`ruff`), formatting, and
+type checking (`mypy`) run in CI and via `pre-commit`.
 
 ## Contributing
 
