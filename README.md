@@ -1,6 +1,7 @@
 # Universal Data Cleaner
 
 [![CI](https://github.com/devlprkhan/universal-data-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/devlprkhan/universal-data-cleaner/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/universal-data-cleaner.svg)](https://pypi.org/project/universal-data-cleaner/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Managed with uv](https://img.shields.io/badge/managed%20with-uv-6f42c1.svg)](https://docs.astral.sh/uv/)
@@ -40,7 +41,20 @@ breaks at inference time because the median is recomputed on the new batch.
 
 The cleaner never mutates the input DataFrame and never drops inference rows.
 
-## Setup with uv
+## Install from PyPI
+
+```bash
+pip install universal-data-cleaner
+```
+
+The distribution name is `universal-data-cleaner`; the import name is
+`data_cleaner`.
+
+```python
+from data_cleaner import CleanerConfig, DataCleaner
+```
+
+## Development setup with uv
 
 ```bash
 git clone https://github.com/devlprkhan/universal-data-cleaner.git
