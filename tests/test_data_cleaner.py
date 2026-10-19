@@ -1,27 +1,31 @@
 from __future__ import annotations
 
+import pickle
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
-from data_cleaner import (
-    CleanerConfig,
-    ColumnSpec,
-    DataCleaner,
-    DataContract,
-    assert_frame_clean,
-    dataset_summary,
-    drop_duplicate_rows,
-    profile_dataframe,
-)
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
+
+from data_cleaner import (
+    CleanerConfig,
+    ColumnSpec,
+    DataCleaner,
+    DataContract,
+    DriftReport,
+    assert_frame_clean,
+    dataset_summary,
+    drop_duplicate_rows,
+    profile_dataframe,
+)
 
 
 def sample_data(seed: int = 7) -> pd.DataFrame:
@@ -288,6 +292,123 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             cleaner.transform(frame.drop(columns=["b"]))
         self.assertIn("missing required columns", str(ctx.exception))
+
+
+class PackageTests(unittest.TestCase):
+    """Guardrails for the packaged (multi-module) layout."""
+
+    def test_public_api_is_complete(self) -> None:
+        import data_cleaner
+
+        for name in (
+            "CleanerConfig",
+            "ColumnSpec",
+            "DataCleaner",
+            "DataContract",
+            "DriftReport",
+            "assert_frame_clean",
+            "dataset_summary",
+            "drop_duplicate_rows",
+            "profile_dataframe",
+        ):
+            self.assertTrue(hasattr(data_cleaner, name), name)
+        self.assertRegex(data_cleaner.__version__, r"^\d+\.\d+\.\d+")
+
+    def test_typed_marker_is_installed(self) -> None:
+        import data_cleaner
+
+        package_dir = Path(data_cleaner.__file__).parent
+        self.assertTrue((package_dir / "py.typed").is_file())
+
+    def test_legacy_flat_module_artifact_loads(self) -> None:
+        """An artifact pickled by the pre-2.2.0 single-module layout still loads.
+
+        Before the package split, every public class lived in a flat
+        ``data_cleaner`` module, so pickles referenced ``data_cleaner.DataCleaner``
+        and friends. We reproduce that layout by temporarily remapping the
+        classes' ``__module__`` while saving, which keeps the test independent of
+        the pandas version and therefore safe across the whole test matrix.
+        """
+        import data_cleaner
+
+        train = pd.DataFrame(
+            {
+                "customer_id": [1, 2, 3, 4, 5],
+                "age": [25.0, None, 35.0, 40.0, 29.0],
+                "city": ["NY", "LA", "NY", None, "SF"],
+                "active": [True, False, True, True, False],
+                "joined": pd.to_datetime(
+                    [
+                        "2020-01-01",
+                        "2020-06-15",
+                        "2021-03-10",
+                        "2021-12-31",
+                        "2019-07-04",
+                    ]
+                ),
+            }
+        )
+        cleaner = DataCleaner(CleanerConfig(datetime_columns=("joined",))).fit(train)
+
+        legacy_classes = (
+            CleanerConfig,
+            ColumnSpec,
+            DataContract,
+            DataCleaner,
+            DriftReport,
+        )
+        original_modules = {cls: cls.__module__ for cls in legacy_classes}
+        try:
+            for cls in legacy_classes:
+                cls.__module__ = "data_cleaner"
+
+            blob = pickle.dumps(cleaner)
+            self.assertIn(b"data_cleaner", blob)
+            self.assertNotIn(b"data_cleaner.cleaner", blob)
+
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "legacy_flat.joblib"
+                cleaner.save(path)
+
+                payload = joblib.load(path)
+                payload["library_version"] = "2.1.0"
+                joblib.dump(payload, path, compress=3)
+
+                with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+                    restored = DataCleaner.load(path)
+        finally:
+            for cls, module in original_modules.items():
+                cls.__module__ = module
+
+        self.assertTrue(any("2.1.0" in line for line in logs.output))
+        self.assertNotEqual(data_cleaner.__version__, "2.1.0")
+
+        frame = pd.DataFrame(
+            {
+                "customer_id": [10, 11],
+                "age": [None, 41.0],
+                "city": ["NY", "BOS"],
+                "active": [True, False],
+                "joined": pd.to_datetime(["2022-05-01", "2023-02-14"]),
+            }
+        )
+        cleaned = restored.transform(frame)
+        assert_frame_clean(cleaned)
+        self.assertEqual(len(cleaned), len(frame))
+        self.assertEqual(
+            list(cleaned.columns),
+            [
+                "customer_id",
+                "age",
+                "city",
+                "active",
+                "joined__year",
+                "joined__month",
+                "joined__day",
+                "joined__dayofweek",
+            ],
+        )
+        self.assertFalse(cleaned["age"].isna().any())
 
 
 if __name__ == "__main__":

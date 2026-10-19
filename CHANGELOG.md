@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-10-20
+
+### Added
+
+- Typed public package: the library now ships as `src/data_cleaner/` with a
+  PEP 561 `py.typed` marker, so type checkers and IDEs pick up the annotations.
+- Continuous integration now runs `ruff` (lint + format), `mypy` (type checking),
+  and the test matrix on Python 3.10–3.13, plus a build/`twine check` job.
+- `pre-commit` configuration for local linting, formatting, and type checking.
+- A cross-version artifact compatibility test that reproduces the pre-package
+  (flat module) pickle layout and verifies the artifact still loads and cleans.
+
+### Changed
+
+- Internal structure split from a single module into a package
+  (`_version`, `_roles`, `contract`, `config`, `cleaner`, `profiling`). The
+  public API and `import data_cleaner` are unchanged.
+- Project tooling now enforces linting, formatting, and typing on every change.
+
+### Notes
+
+- Fully backwards compatible: `import data_cleaner` and all public names are
+  re-exported from the package root, and v2.0.0/v2.1.0 joblib artifacts still
+  load.
+
 ## [2.1.0] - 2026-10-20
 
 ### Added
