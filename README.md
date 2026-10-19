@@ -120,9 +120,9 @@ For a column that should be numeric even though it arrived as dirty strings:
 
 ```python
 config = CleanerConfig(
-    numeric_columns=("salary",),          # force numeric parsing
-    datetime_columns=("joined",),        # parse dates instead of treating them as categories
-    unseen_category="keep",              # or "fill" to replace unseen labels
+    numeric_columns=("salary",),  # force numeric parsing
+    datetime_columns=("joined",),  # parse dates instead of treating them as categories
+    unseen_category="keep",  # or "fill" to replace unseen labels
 )
 ```
 
@@ -138,7 +138,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 cleaner = DataCleaner(config).fit(X_train)
 
 X_train_clean = cleaner.transform(X_train)
-X_test_clean = cleaner.transform(X_test)   # uses train statistics only
+X_test_clean = cleaner.transform(X_test)  # uses train statistics only
 ```
 
 Save the fitted cleaner with the model artifact:
@@ -164,11 +164,9 @@ contract = DataContract(
     ],
 )
 
-cleaner = DataCleaner(
-    CleanerConfig(contract=contract, on_drift="warn")
-).fit(X_train)
+cleaner = DataCleaner(CleanerConfig(contract=contract, on_drift="warn")).fit(X_train)
 
-X_test_clean = cleaner.transform(X_test)   # drift is detected, never mutates
+X_test_clean = cleaner.transform(X_test)  # drift is detected, never mutates
 print(cleaner.drift_report())
 ```
 
@@ -203,7 +201,7 @@ Use `role="ignore"` to drop operational columns from the output.
 Contracts can be version-controlled and shared between training and serving:
 
 ```python
-contract.to_json()                       # store it with the model artifact
+contract.to_json()  # store it with the model artifact
 restored = DataContract.from_json(payload)
 
 # Optional YAML support requires `pip install pyyaml`

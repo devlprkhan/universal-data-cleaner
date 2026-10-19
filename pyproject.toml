@@ -53,9 +53,13 @@ Changelog = "https://github.com/devlprkhan/universal-data-cleaner/blob/main/CHAN
 dev = [
     "ipykernel>=7.3.0",
     "jupyterlab>=4.6.4",
+    "mypy>=2.4.0",
     "nbclient>=0.11.0",
     "nbformat>=5.11.1",
+    "pandas-stubs>=2.3.3.260113",
+    "pre-commit>=4.6.2",
     "pytest>=9.1.1",
+    "ruff>=0.17.1",
 ]
 
 [tool.setuptools]
@@ -64,3 +68,35 @@ py-modules = ["data_cleaner"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+show_error_codes = true
+ignore_missing_imports = true
+files = ["data_cleaner.py", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "yaml", "joblib.*"]
+ignore_missing_imports = true
