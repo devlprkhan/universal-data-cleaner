@@ -287,9 +287,7 @@ predictions = pipeline.predict(X_test)
 │   ├── profiling.py                   # profiling and validation helpers
 │   └── py.typed                       # PEP 561 marker
 ├── Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
-├── tests/
-│   ├── test_data_cleaner.py           # unit and integration tests
-│   └── fixtures/                      # stored artifacts for compatibility tests
+├── tests/test_data_cleaner.py         # unit and integration tests
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
 ├── .pre-commit-config.yaml            # local lint/format/type hooks

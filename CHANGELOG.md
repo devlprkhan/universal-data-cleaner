@@ -14,8 +14,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Continuous integration now runs `ruff` (lint + format), `mypy` (type checking),
   and the test matrix on Python 3.10–3.13, plus a build/`twine check` job.
 - `pre-commit` configuration for local linting, formatting, and type checking.
-- A `2.1.0` joblib artifact compatibility test that loads a real fixture and
-  verifies the cleaned output.
+- A cross-version artifact compatibility test that reproduces the pre-package
+  (flat module) pickle layout and verifies the artifact still loads and cleans.
 
 ### Changed
 

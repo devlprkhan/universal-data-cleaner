@@ -273,8 +273,8 @@ Compatibility rules:
 
 - `import data_cleaner; data_cleaner.DataCleaner` keeps working.
 - Existing pickled artifacts reference `data_cleaner.DataCleaner`. That
-  qualified name stays stable, and a fixture test loads a real `v2.1.0`
-  artifact after the restructure.
+  qualified name stays stable, and a fixture test loads an artifact saved under
+  the legacy flat-module layout after the restructure.
 - The restructure stayed in the 2.x line because no public import path moved.
 
 ---
@@ -285,8 +285,10 @@ Compatibility rules:
   train, idempotent `transform`.
 - **Drift matrix**: for each contract field, construct a frame that violates it
   and assert the exact report entry and policy behavior.
-- **Artifact compatibility**: a committed `v2.1.0` cleaner fixture is loaded after
-  the package restructure to prove old artifacts still work.
+- **Artifact compatibility**: an artifact pickled under the legacy flat-module
+  layout is loaded after the package restructure. The test remaps the classes'
+  module names at runtime, so it is pandas-version independent and safe across
+  the whole CI matrix.
 - **Pure-function correctness**: compare `diagnose_join` against hand-computed
   pandas cardinalities on 1:1, 1:m, m:m, empty, and all-unmatched cases.
 - **Property-based tests** (optional `hypothesis` dev dep) for dedup and
