@@ -5,6 +5,37 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-10-20
+
+### Added
+
+- `CleaningDecision` and `DataCleaner.decision_log()`: a tidy audit trail of
+  every learned or configured cleaning decision (`column`, `action`, `reason`,
+  `source`, `before`, `after`).
+- `DataCleaner.to_manifest()` and `artifact_manifest()`: JSON-serializable
+  manifests with library/artifact versions, Python/pandas/numpy/scikit-learn
+  versions, config, contract, input schema, output columns, fit summary,
+  decisions, and an optional data fingerprint.
+- `fingerprint_dataframe()`, `compare_fingerprints()`, and
+  `assert_schema_stable()`: stable SHA-256 fingerprints of schema plus summary
+  statistics for lineage checks. Raw values are never hashed.
+- `DataCleaner.fingerprint(X)` for on-demand fingerprints and
+  `CleanerConfig.fingerprint_on_fit` to compute the training fingerprint during
+  `fit()`.
+
+### Changed
+
+- `save()` now embeds the manifest and fingerprint in the artifact; `load()`
+  restores them and warns when an artifact predates audit metadata.
+- Older artifacts are backfilled on load: `decision_log()` returns an empty,
+  correctly-shaped DataFrame instead of failing.
+- Artifact format version bumped to `2`.
+
+### Notes
+
+- Fully backwards compatible: existing configuration, public imports, and
+  v2.0.0–v2.2.0 joblib artifacts continue to work.
+
 ## [2.2.0] - 2026-10-20
 
 ### Added

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pickle
 import tempfile
 import unittest
@@ -15,15 +16,20 @@ from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+import data_cleaner
 from data_cleaner import (
     CleanerConfig,
+    CleaningDecision,
     ColumnSpec,
     DataCleaner,
     DataContract,
     DriftReport,
     assert_frame_clean,
+    assert_schema_stable,
+    compare_fingerprints,
     dataset_summary,
     drop_duplicate_rows,
+    fingerprint_dataframe,
     profile_dataframe,
 )
 
@@ -63,6 +69,17 @@ def sample_data(seed: int = 7) -> pd.DataFrame:
     return frame
 
 
+def sample_config(**kwargs: Any) -> CleanerConfig:
+    defaults: dict[str, Any] = {
+        "numeric_columns": ("Salary",),
+        "datetime_columns": ("SignupDate",),
+        "add_missing_indicators": True,
+        "drop_constant_columns": True,
+    }
+    defaults.update(kwargs)
+    return CleanerConfig(**defaults)
+
+
 class DataCleanerTests(unittest.TestCase):
     def setUp(self) -> None:
         frame = sample_data()
@@ -70,14 +87,7 @@ class DataCleanerTests(unittest.TestCase):
         self.target = frame["Target"]
 
     def config(self, **kwargs: Any) -> CleanerConfig:
-        defaults: dict[str, Any] = {
-            "numeric_columns": ("Salary",),
-            "datetime_columns": ("SignupDate",),
-            "add_missing_indicators": True,
-            "drop_constant_columns": True,
-        }
-        defaults.update(kwargs)
-        return CleanerConfig(**defaults)
+        return sample_config(**kwargs)
 
     def test_fit_transform_has_no_missing_or_infinity(self) -> None:
         cleaner = DataCleaner(self.config())
@@ -294,29 +304,229 @@ class ContractTests(unittest.TestCase):
         self.assertIn("missing required columns", str(ctx.exception))
 
 
+class AuditTests(unittest.TestCase):
+    """Decision log and artifact manifest behavior."""
+
+    def setUp(self) -> None:
+        frame = sample_data()
+        self.features = frame.drop(columns=["Target"])
+        self.cleaner = DataCleaner(sample_config()).fit(self.features)
+
+    def test_cleaning_decision_to_dict(self) -> None:
+        decision = CleaningDecision(
+            column="age",
+            action="impute",
+            reason="median imputation",
+            source="learned",
+            before=2,
+            after=30.0,
+        )
+        self.assertEqual(
+            decision.to_dict(),
+            {
+                "column": "age",
+                "action": "impute",
+                "reason": "median imputation",
+                "source": "learned",
+                "before": 2,
+                "after": 30.0,
+            },
+        )
+
+    def test_decision_log_has_expected_shape_and_actions(self) -> None:
+        log = self.cleaner.decision_log()
+        self.assertEqual(
+            list(log.columns),
+            ["column", "action", "reason", "source", "before", "after"],
+        )
+        self.assertFalse(log.empty)
+        actions = set(log["action"])
+        for expected in {
+            "infer_contract",
+            "impute",
+            "cap_outliers",
+            "expand_datetime",
+            "add_missing_indicator",
+            "drop_column",
+            "finalize_schema",
+        }:
+            self.assertIn(expected, actions, expected)
+        self.assertTrue((log["reason"].astype(str).str.len() > 0).all())
+        self.assertTrue(
+            set(log["source"]).issubset(
+                {"learned", "config", "contract", "default", "inferred"}
+            )
+        )
+        constant_rows = log[log["column"] == "Constant"]
+        self.assertIn("drop_column", set(constant_rows["action"]))
+
+    def test_decision_log_marks_contract_sources(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "customer_id": [1001, 1002],
+                "amount": [10.0, 20.0],
+                "notes": ["a", "b"],
+            }
+        )
+        contract = DataContract(
+            columns=(
+                ColumnSpec("customer_id", role="id"),
+                ColumnSpec("notes", role="ignore"),
+            )
+        )
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        log = cleaner.decision_log()
+
+        use_contract = log[log["action"] == "use_contract"]
+        self.assertEqual(len(use_contract), 1)
+
+        id_rows = log[
+            (log["column"] == "customer_id") & (log["action"] == "stringify_identifier")
+        ]
+        self.assertEqual(len(id_rows), 1)
+        self.assertEqual(id_rows.iloc[0]["source"], "contract")
+
+        ignored = log[(log["column"] == "notes") & (log["action"] == "drop_column")]
+        self.assertEqual(len(ignored), 1)
+        self.assertEqual(ignored.iloc[0]["source"], "contract")
+
+    def test_manifest_is_json_serializable_and_complete(self) -> None:
+        manifest: dict[str, Any] = self.cleaner.to_manifest(
+            self.features, include_fingerprint=True
+        )
+        json.dumps(manifest)
+
+        self.assertEqual(manifest["library_version"], data_cleaner.__version__)
+        self.assertEqual(manifest["artifact_version"], 2)
+        self.assertEqual(
+            manifest["environment"]["universal_data_cleaner"],
+            data_cleaner.__version__,
+        )
+        self.assertIsInstance(manifest["config"], dict)
+        self.assertIsNotNone(manifest["contract"])
+        self.assertTrue(manifest["input_schema"])
+        self.assertEqual(
+            manifest["output_columns"],
+            list(self.cleaner.get_feature_names_out()),
+        )
+        self.assertEqual(manifest["fitted"]["n_features_in"], self.features.shape[1])
+        self.assertEqual(len(manifest["fingerprint"]), 64)
+        self.assertTrue(manifest["decisions"])
+        self.assertEqual(
+            self.cleaner.artifact_manifest()["output_columns"],
+            list(self.cleaner.get_feature_names_out()),
+        )
+
+    def test_manifest_fingerprint_requires_source(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0]})
+        config = sample_config(numeric_columns=("a",), datetime_columns=())
+        cleaner = DataCleaner(config).fit(frame)
+        with self.assertRaises(ValueError):
+            cleaner.to_manifest(include_fingerprint=True)
+
+        fingerprinted = DataCleaner(
+            sample_config(
+                numeric_columns=("a",),
+                datetime_columns=(),
+                fingerprint_on_fit=True,
+            )
+        ).fit(frame)
+        manifest: dict[str, Any] = fingerprinted.to_manifest(include_fingerprint=True)
+        self.assertEqual(manifest["fingerprint"], fingerprinted.training_fingerprint_)
+        self.assertEqual(len(fingerprinted.fingerprint(frame)), 64)
+
+    def test_artifact_manifest_roundtrip_and_backfill(self) -> None:
+        frame = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config(fingerprint_on_fit=True)).fit(frame)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            payload = joblib.load(path)
+            saved_manifest = payload["manifest"]
+
+            restored = DataCleaner.load(path)
+            self.assertEqual(restored.artifact_manifest(), saved_manifest)
+            self.assertEqual(
+                restored.training_fingerprint_, cleaner.training_fingerprint_
+            )
+            self.assertFalse(restored.decision_log().empty)
+
+            legacy_cleaner = payload["cleaner"]
+            for attribute in ("decisions_", "input_schema_", "training_fingerprint_"):
+                legacy_cleaner.__dict__.pop(attribute, None)
+            payload.pop("manifest")
+            payload["artifact_version"] = 1
+            payload["library_version"] = "2.2.0"
+            joblib.dump(payload, path, compress=3)
+
+            with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+                legacy = DataCleaner.load(path)
+        messages = "\n".join(logs.output)
+        self.assertIn("no manifest", messages)
+        self.assertIn("no decision log", messages)
+        self.assertIn("Artifact version", messages)
+        self.assertTrue(legacy.decision_log().empty)
+        self.assertIsNotNone(legacy.artifact_manifest())
+
+
+class FingerprintTests(unittest.TestCase):
+    """Stable lineage fingerprints and schema-stability assertions."""
+
+    def test_fingerprint_is_stable_and_sensitive(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": ["x", "y", "x"]})
+        first = fingerprint_dataframe(frame)
+        self.assertEqual(first, fingerprint_dataframe(frame.copy()))
+        self.assertEqual(len(first), 64)
+        self.assertNotEqual(
+            first, fingerprint_dataframe(frame.assign(a=[1.0, 2.0, 4.0]))
+        )
+        self.assertNotEqual(first, fingerprint_dataframe(frame[["b", "a"]]))
+        self.assertNotEqual(first, fingerprint_dataframe(frame, columns=["a"]))
+
+    def test_fingerprint_validation(self) -> None:
+        frame = pd.DataFrame({"a": [1.0]})
+        with self.assertRaises(TypeError):
+            fingerprint_dataframe([1, 2])  # type: ignore[arg-type]
+        with self.assertRaises(KeyError):
+            fingerprint_dataframe(frame, columns=["missing"])
+        duplicates = pd.DataFrame([[1, 2]], columns=["a", "a"])
+        with self.assertRaises(ValueError):
+            fingerprint_dataframe(duplicates)
+
+    def test_compare_and_assert_schema_stable(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0]})
+        expected = fingerprint_dataframe(frame)
+        self.assertTrue(compare_fingerprints(expected, expected))
+        self.assertFalse(compare_fingerprints(expected, "0" * 64))
+
+        assert_schema_stable(frame, expected)
+        with self.assertRaises(ValueError):
+            assert_schema_stable(frame.assign(a=[9.0, 2.0]), expected)
+
+
 class PackageTests(unittest.TestCase):
     """Guardrails for the packaged (multi-module) layout."""
 
     def test_public_api_is_complete(self) -> None:
-        import data_cleaner
-
         for name in (
             "CleanerConfig",
+            "CleaningDecision",
             "ColumnSpec",
             "DataCleaner",
             "DataContract",
             "DriftReport",
             "assert_frame_clean",
+            "assert_schema_stable",
+            "compare_fingerprints",
             "dataset_summary",
             "drop_duplicate_rows",
+            "fingerprint_dataframe",
             "profile_dataframe",
         ):
             self.assertTrue(hasattr(data_cleaner, name), name)
         self.assertRegex(data_cleaner.__version__, r"^\d+\.\d+\.\d+")
 
     def test_typed_marker_is_installed(self) -> None:
-        import data_cleaner
-
         package_dir = Path(data_cleaner.__file__).parent
         self.assertTrue((package_dir / "py.typed").is_file())
 
@@ -329,8 +539,6 @@ class PackageTests(unittest.TestCase):
         classes' ``__module__`` while saving, which keeps the test independent of
         the pandas version and therefore safe across the whole test matrix.
         """
-        import data_cleaner
-
         train = pd.DataFrame(
             {
                 "customer_id": [1, 2, 3, 4, 5],
@@ -352,6 +560,7 @@ class PackageTests(unittest.TestCase):
 
         legacy_classes = (
             CleanerConfig,
+            CleaningDecision,
             ColumnSpec,
             DataContract,
             DataCleaner,

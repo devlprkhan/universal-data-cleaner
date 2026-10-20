@@ -208,6 +208,61 @@ restored = DataContract.from_json(payload)
 # restored = DataContract.from_yaml(contract.to_yaml())
 ```
 
+## Audit trail, manifests, and fingerprints
+
+Every learned or configured decision is recorded during `fit()` and exposed as
+a tidy DataFrame:
+
+```python
+log = cleaner.decision_log()
+# columns: column, action, reason, source, before, after
+log[log["action"] == "cap_outliers"]
+```
+
+`source` says whether a rule was `learned` from the training data, supplied via
+`config`, declared in a `contract`, or `inferred` by the library. Imputation
+values, outlier bounds, datetime expansion, missing indicators, dropped
+constants, and identifier handling are all explained instead of hidden.
+
+Build a JSON-serializable manifest for logs or a model registry:
+
+```python
+import json
+
+manifest = cleaner.to_manifest(X_train, include_fingerprint=True)
+# library_version, artifact_version, environment, config, contract,
+# input_schema, output_columns, fitted, decisions, fingerprint
+
+json.dumps(manifest)  # safe to ship to a registry or a log line
+```
+
+`save()` embeds the manifest and the training fingerprint in the artifact, and
+`load()` restores them:
+
+```python
+cleaner.save("cleaner.joblib")
+restored = DataCleaner.load("cleaner.joblib")
+restored.artifact_manifest()
+```
+
+Fingerprints are stable SHA-256 hashes of the schema plus summary statistics.
+They never hash raw values, so they are safe to log:
+
+```python
+from data_cleaner import (
+    assert_schema_stable,
+    compare_fingerprints,
+    fingerprint_dataframe,
+)
+
+expected = fingerprint_dataframe(X_train)
+same = compare_fingerprints(expected, fingerprint_dataframe(X_new))
+assert_schema_stable(X_new, expected)  # raises ValueError on schema/stat drift
+```
+
+Set `CleanerConfig(fingerprint_on_fit=True)` to compute the training fingerprint
+once during `fit()`, so `to_manifest(include_fingerprint=True)` needs no data.
+
 ## scikit-learn Pipeline
 
 ```python
@@ -246,11 +301,19 @@ predictions = pipeline.predict(X_test)
 | --- | --- |
 | `CleanerConfig` | Validated cleaning configuration |
 | `DataCleaner` | Fit/transform cleaner with save/load and drift reporting |
+| `CleaningDecision` | One auditable learned or configured decision |
 | `ColumnSpec` | Declarative expectations and semantics for one column |
 | `DataContract` | A set of column specs, with inference and (de)serialization |
 | `DriftReport` | Findings from a contract check, with a Markdown summary |
 | `DataCleaner.drift_report()` | Drift findings from the last `transform` |
 | `DataCleaner.fitted_contract()` | The contract used by the fitted cleaner |
+| `DataCleaner.decision_log()` | Tidy DataFrame of cleaning decisions |
+| `DataCleaner.to_manifest()` | JSON-serializable artifact manifest |
+| `DataCleaner.artifact_manifest()` | Manifest stored in a loaded artifact |
+| `DataCleaner.fingerprint()` | Stable schema + statistics fingerprint |
+| `fingerprint_dataframe` | Fingerprint any DataFrame for lineage |
+| `compare_fingerprints` | Compare two fingerprints |
+| `assert_schema_stable` | Raise when a frame's fingerprint changed |
 | `profile_dataframe` | Column-level missing/type/cardinality profile |
 | `dataset_summary` | Row/column/missing/duplicate summary |
 | `drop_duplicate_rows` | Explicit duplicate removal helper |
@@ -272,6 +335,10 @@ predictions = pipeline.predict(X_test)
   represented by the generated feature NaNs plus an optional missing indicator.
 - IQR capping is skipped automatically when the IQR is zero, so constant or
   near-constant numeric columns are not accidentally destroyed.
+- Persist `cleaner.to_manifest(X_train, include_fingerprint=True)` alongside the
+  model so you can audit exactly which cleaning rules produced an artifact.
+- `decision_log()` explains every learned or configured rule; ship it to your
+  experiment tracker when a model's preprocessing changes.
 
 ## Project layout
 

@@ -251,23 +251,26 @@ to the existing transformer, so it should not gate the core value.
 
 ## 5. Package structure
 
-**Shipped in `v2.2.0`.** The single `data_cleaner.py` module was split into a
-typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker, while
-keeping the public import path and the pickled-artifact qualified name stable.
+**Package shipped in `v2.2.0`; audit modules added in `v2.3.0`.** The single
+`data_cleaner.py` module was split into a typed `src/data_cleaner/` package with
+a PEP 561 `py.typed` marker, while keeping the public import path and the
+pickled-artifact qualified name stable.
 
 ```text
 src/data_cleaner/
 ├── __init__.py        # public API re-exports (stable import path)
 ├── _version.py        # __version__, artifact version
 ├── _roles.py          # semantic roles, dtype/identifier helpers
+├── artifacts.py       # fingerprints and runtime version metadata
 ├── contract.py        # ColumnSpec, DataContract, DriftReport
 ├── config.py          # CleanerConfig
 ├── cleaner.py         # DataCleaner
+├── decisions.py       # CleaningDecision, decision log
 └── profiling.py       # profile_dataframe, dataset_summary, helpers
 ```
 
-Future tiers add modules alongside these, e.g. `decisions.py`, `artifacts.py`,
-`validation.py`, `integration.py`, `ml_audit.py`, and `ingestion.py`.
+Future tiers add modules alongside these: `validation.py`, `integration.py`,
+`ml_audit.py`, and `ingestion.py`.
 
 Compatibility rules:
 
@@ -327,8 +330,9 @@ GitHub release, let `publish.yml` handle PyPI.
 
 ## 9. Current step
 
-Tiers 1 (`v2.1.0`) and the typed package restructure (`v2.2.0`) are shipped.
+Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), and Tier 2
+(`v2.3.0`: decision log, manifest, fingerprints) are shipped.
 
-Implement **Tier 2 (`v2.3.0`)**: `CleaningDecision`, `decision_log()`, the
-artifact manifest, and data fingerprints. It makes the Tier 1 drift reports
-trustworthy over time and is a prerequisite for the validation and audit tiers.
+Implement **Tier 3 (`v2.4.0`)**: validation and integration diagnostics —
+`diagnose_join`, `check_referential_integrity`, a lightweight expectations API,
+and `ValidationReport`.

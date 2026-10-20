@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,10 +16,12 @@ from pandas.api import types as ptypes
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 
-from ._roles import _stringify_identifier
+from ._roles import _series_kind, _stringify_identifier
 from ._version import _ARTIFACT_VERSION, __version__
+from .artifacts import fingerprint_dataframe, package_versions
 from .config import CleanerConfig
 from .contract import DataContract, DriftReport
+from .decisions import DECISION_COLUMNS, CleaningDecision
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +40,9 @@ class DataCleaner(TransformerMixin, BaseEstimator):
     def fit(self, X: pd.DataFrame, y: object | None = None) -> DataCleaner:
         """Learn cleaning rules from training data."""
         frame = self._validate_frame(X, required=None, allow_empty=False)
+        self.decisions_: list[CleaningDecision] = []
         self.contract_ = self._resolve_contract(frame)
+        self._record_contract_decision()
         frame = self._drop_ignored_columns(frame)
         roles = self._infer_roles(frame)
         self.id_columns_ = [
@@ -45,10 +51,31 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self.text_columns_ = [
             column for column in frame.columns if self._role_for(column) == "text"
         ]
+        for column in self.id_columns_:
+            self._record(
+                column,
+                "stringify_identifier",
+                "identifier columns are treated as text",
+                "contract",
+                str(frame[column].dtype),
+                "string",
+            )
         prepared, missing_flags, generated = self._prepare_frame(frame, roles)
+        self._record_type_decisions(frame, roles, generated)
 
         self.feature_names_in_ = np.asarray(list(frame.columns), dtype=object)
         self.n_features_in_ = len(frame.columns)
+        self.input_schema_ = [
+            {
+                "name": column,
+                "dtype": str(frame[column].dtype),
+                "kind": _series_kind(frame[column]),
+            }
+            for column in frame.columns
+        ]
+        self.training_fingerprint_ = (
+            fingerprint_dataframe(frame) if self.config.fingerprint_on_fit else None
+        )
         self.roles_ = roles
         self.drift_report_ = DriftReport.empty().findings
         self.datetime_feature_columns_ = generated
@@ -80,6 +107,15 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self._fit_numeric(prepared, roles)
         self._fit_boolean(prepared)
         self._fit_categorical(prepared)
+        if self.config.unseen_category == "fill" and self.categorical_columns_:
+            self._record(
+                "*",
+                "unseen_category_policy",
+                "unseen labels are replaced at transform time",
+                "config",
+                None,
+                self.config.categorical_fill_value,
+            )
 
         self.indicator_columns_: dict[str, str] = {}
         if self.config.add_missing_indicators:
@@ -96,12 +132,30 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 prepared[name] = flags.astype(bool)
                 used.add(name)
                 self.indicator_columns_[source] = name
+                self._record(
+                    source,
+                    "add_missing_indicator",
+                    "column had missing values during fit",
+                    "config",
+                    self.missing_counts_.get(source, 0),
+                    name,
+                )
 
         self.constant_columns_ = [
             column
             for column in prepared.columns
             if prepared[column].nunique(dropna=False) <= 1
         ]
+        if self.config.drop_constant_columns:
+            for column in self.constant_columns_:
+                self._record(
+                    column,
+                    "drop_column",
+                    "column is constant after cleaning",
+                    "learned",
+                    str(prepared[column].dtype),
+                    None,
+                )
         dropped = (
             set(self.constant_columns_) if self.config.drop_constant_columns else set()
         )
@@ -119,6 +173,14 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         ]
         self.dropped_columns_ = sorted(
             set(frame.columns).difference(self.columns_).intersection(roles)
+        )
+        self._record(
+            "*",
+            "finalize_schema",
+            "output schema assembled after cleaning",
+            "inferred",
+            int(self.n_features_in_),
+            list(self.columns_),
         )
 
         self._build_summary()
@@ -258,6 +320,96 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self._ensure_fitted()
         return self.contract_
 
+    def decision_log(self) -> pd.DataFrame:
+        """Return one row per learned or configured cleaning decision."""
+        self._ensure_fitted()
+        decisions = getattr(self, "decisions_", [])
+        return pd.DataFrame(
+            [decision.to_dict() for decision in decisions],
+            columns=DECISION_COLUMNS,
+        )
+
+    def fingerprint(self, X: pd.DataFrame) -> str:
+        """Return a stable schema + statistics fingerprint for ``X``."""
+        self._ensure_fitted()
+        frame = self._validate_frame(X, required=None, allow_empty=True)
+        return fingerprint_dataframe(frame)
+
+    def to_manifest(
+        self,
+        X: pd.DataFrame | None = None,
+        *,
+        include_fingerprint: bool = False,
+    ) -> dict[str, object]:
+        """Return a JSON-serializable manifest describing this fitted cleaner.
+
+        Parameters
+        ----------
+        X:
+            Optional frame to fingerprint. When omitted and
+            ``include_fingerprint`` is true, the fingerprint computed during fit
+            is used (requires ``CleanerConfig(fingerprint_on_fit=True)``).
+        include_fingerprint:
+            Include a :func:`fingerprint_dataframe` hash in the manifest.
+
+        Raises
+        ------
+        ValueError
+            If a fingerprint is requested but none can be computed.
+        """
+        self._ensure_fitted()
+        fingerprint: str | None = None
+        if include_fingerprint:
+            if X is not None:
+                fingerprint = self.fingerprint(X)
+            elif getattr(self, "training_fingerprint_", None) is not None:
+                fingerprint = self.training_fingerprint_
+            else:
+                raise ValueError(
+                    "No fingerprint available. Pass X=... or fit with "
+                    "CleanerConfig(fingerprint_on_fit=True)."
+                )
+
+        contract = self.contract_
+        return {
+            "library_version": __version__,
+            "artifact_version": _ARTIFACT_VERSION,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "environment": package_versions(),
+            "config": asdict(self.config),
+            "contract": None if contract is None else contract.to_dict(),
+            "input_schema": [dict(item) for item in getattr(self, "input_schema_", [])],
+            "output_columns": list(self.columns_),
+            "fitted": {
+                "n_samples": int(self.n_samples_fit_),
+                "n_features_in": int(self.n_features_in_),
+                "n_features_out": len(self.columns_),
+                "fitted_at": self.fitted_at_,
+            },
+            "decisions": [
+                decision.to_dict() for decision in getattr(self, "decisions_", [])
+            ],
+            "fingerprint": fingerprint,
+        }
+
+    def artifact_manifest(
+        self,
+        X: pd.DataFrame | None = None,
+        *,
+        include_fingerprint: bool = False,
+    ) -> dict[str, object]:
+        """Return the manifest stored in the artifact, or build a fresh one.
+
+        After :meth:`load`, this returns the manifest captured when the
+        artifact was saved. For a fitted-but-unsaved cleaner it falls back to
+        :meth:`to_manifest`.
+        """
+        self._ensure_fitted()
+        stored = getattr(self, "artifact_manifest_", None)
+        if stored is not None:
+            return deepcopy(stored)
+        return self.to_manifest(X, include_fingerprint=include_fingerprint)
+
     def _resolve_contract(self, frame: pd.DataFrame) -> DataContract | None:
         if self.config.contract is not None:
             return self.config.contract
@@ -276,6 +428,15 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 and spec.role == "ignore"
             )
         ]
+        for column in ignored:
+            self._record(
+                column,
+                "drop_column",
+                "column role is 'ignore'",
+                "contract",
+                str(frame[column].dtype),
+                None,
+            )
         return frame.drop(columns=ignored) if ignored else frame
 
     def _role_for(self, column: str) -> str | None:
@@ -298,14 +459,20 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             LOGGER.warning("Schema drift detected:\n%s", report.summary())
 
     def save(self, path: str | Path) -> Path:
-        """Persist the fitted cleaner as a joblib artifact."""
+        """Persist the fitted cleaner and its manifest as a joblib artifact."""
         self._ensure_fitted()
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
+        created_at = datetime.now(timezone.utc).isoformat()
+        has_fingerprint = getattr(self, "training_fingerprint_", None) is not None
+        manifest = self.to_manifest(include_fingerprint=has_fingerprint)
+        manifest["created_at"] = created_at
         payload = {
             "artifact_version": _ARTIFACT_VERSION,
             "library_version": __version__,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": created_at,
+            "manifest": manifest,
+            "fingerprint": self.training_fingerprint_,
             "cleaner": self,
         }
         joblib.dump(payload, target, compress=3)
@@ -313,13 +480,32 @@ class DataCleaner(TransformerMixin, BaseEstimator):
 
     @classmethod
     def load(cls, path: str | Path, verify_version: bool = True) -> DataCleaner:
-        """Load a saved cleaner artifact."""
+        """Load a saved cleaner artifact and restore its manifest."""
         payload = joblib.load(Path(path))
         if not isinstance(payload, dict) or "cleaner" not in payload:
             raise ValueError("File is not a valid DataCleaner artifact")
         cleaner = payload["cleaner"]
         if not isinstance(cleaner, cls):
             raise TypeError("Artifact does not contain a DataCleaner")
+
+        manifest = payload.get("manifest")
+        if not isinstance(manifest, dict):
+            LOGGER.warning(
+                "Artifact has no manifest; it was created by an older version"
+            )
+            manifest = None
+        cleaner.artifact_manifest_ = manifest
+
+        if not hasattr(cleaner, "decisions_"):
+            LOGGER.warning("Artifact has no decision log; decision_log() will be empty")
+            cleaner.decisions_ = []
+        if not hasattr(cleaner, "input_schema_"):
+            cleaner.input_schema_ = (
+                list(manifest.get("input_schema", [])) if manifest else []
+            )
+        if not hasattr(cleaner, "training_fingerprint_"):
+            cleaner.training_fingerprint_ = payload.get("fingerprint")
+
         artifact_version = payload.get("artifact_version")
         library_version = payload.get("library_version")
         if verify_version and library_version != __version__:
@@ -338,6 +524,95 @@ class DataCleaner(TransformerMixin, BaseEstimator):
 
     def _ensure_fitted(self) -> None:
         check_is_fitted(self, attributes=["columns_"])
+
+    def _record(
+        self,
+        column: str,
+        action: str,
+        reason: str,
+        source: str,
+        before: object = None,
+        after: object = None,
+    ) -> None:
+        self.decisions_.append(
+            CleaningDecision(
+                column=column,
+                action=action,
+                reason=reason,
+                source=source,
+                before=before,
+                after=after,
+            )
+        )
+
+    def _record_contract_decision(self) -> None:
+        if self.config.contract is not None:
+            self._record(
+                "*",
+                "use_contract",
+                "explicit column contract supplied in config",
+                "contract",
+                None,
+                len(self.config.contract.columns),
+            )
+        elif self.contract_ is not None:
+            self._record(
+                "*",
+                "infer_contract",
+                "conservative contract inferred from the training schema",
+                "default",
+                None,
+                len(self.contract_.columns),
+            )
+
+    def _role_source(self, column: str) -> str:
+        if self.config.contract is not None and self._role_for(column) is not None:
+            return "contract"
+        cfg = self.config
+        if (
+            column in cfg.numeric_columns
+            or column in cfg.categorical_columns
+            or column in cfg.datetime_columns
+        ):
+            return "config"
+        return "inferred"
+
+    def _record_type_decisions(
+        self,
+        frame: pd.DataFrame,
+        roles: dict[str, str],
+        generated: dict[str, list[str]],
+    ) -> None:
+        for column, role in roles.items():
+            source = self._role_source(column)
+            original = str(frame[column].dtype)
+            if role == "datetime":
+                self._record(
+                    column,
+                    "expand_datetime",
+                    "datetime column expanded into calendar features",
+                    source,
+                    original,
+                    generated.get(column, []),
+                )
+            elif role == "numeric" and not ptypes.is_numeric_dtype(frame[column]):
+                self._record(
+                    column,
+                    "coerce_numeric",
+                    "parsed non-numeric input as float",
+                    source,
+                    original,
+                    "float64",
+                )
+            elif role == "boolean" and not ptypes.is_bool_dtype(frame[column]):
+                self._record(
+                    column,
+                    "coerce_boolean",
+                    "cast input to boolean",
+                    source,
+                    original,
+                    "bool",
+                )
 
     def _validate_frame(
         self,
@@ -525,9 +800,24 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             if not np.isfinite(fill):
                 fill = cfg.numeric_fill_value
 
+            if column in roles:
+                missing = int(series.isna().sum())
+                imputation_source = (
+                    "config" if cfg.numeric_imputation == "constant" else "learned"
+                )
+                self._record(
+                    column,
+                    "impute",
+                    f"{cfg.numeric_imputation} imputation for numeric values",
+                    imputation_source,
+                    missing,
+                    fill,
+                )
+
             lower, upper = -np.inf, np.inf
             q1 = q3 = np.nan
             outliers = 0
+            iqr = 0.0
             should_cap = (
                 cfg.cap_outliers and roles.get(column) == "numeric" and not valid.empty
             )
@@ -539,6 +829,23 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                     lower = q1 - cfg.outlier_multiplier * iqr
                     upper = q3 + cfg.outlier_multiplier * iqr
                     outliers = int(((valid < lower) | (valid > upper)).sum())
+                    self._record(
+                        column,
+                        "cap_outliers",
+                        f"IQR x {cfg.outlier_multiplier} bounds",
+                        "learned",
+                        outliers,
+                        (lower, upper),
+                    )
+                else:
+                    self._record(
+                        column,
+                        "skip_outliers",
+                        "IQR is zero, so capping was skipped",
+                        "learned",
+                        0,
+                        None,
+                    )
 
             cleaned = series.fillna(fill).clip(lower=lower, upper=upper)
             prepared[column] = cleaned.astype("float64")
@@ -552,6 +859,14 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             series = prepared[column].astype("boolean")
             valid = series.dropna()
             fill = bool(valid.mode().iloc[0]) if not valid.empty else False
+            self._record(
+                column,
+                "impute",
+                "boolean mode learned from training data",
+                "learned",
+                int(series.isna().sum()),
+                fill,
+            )
             prepared[column] = series.fillna(fill).astype(bool)
             self.fill_values_[column] = fill
 
@@ -567,6 +882,23 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             else:
                 fill = cfg.categorical_fill_value
 
+            if protected:
+                reason = "id/text columns use the placeholder instead of a statistic"
+                source = "contract"
+            elif cfg.categorical_imputation == "mode":
+                reason = "categorical mode learned from training data"
+                source = "learned"
+            else:
+                reason = "configured categorical fill value"
+                source = "config"
+            self._record(
+                column,
+                "impute",
+                reason,
+                source,
+                int(series.isna().sum()),
+                fill,
+            )
             prepared[column] = series.fillna(fill).astype(object)
             self.fill_values_[column] = fill
             if cfg.unseen_category == "fill":

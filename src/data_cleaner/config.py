@@ -35,6 +35,7 @@ class CleanerConfig:
     contract: DataContract | None = None
     on_drift: Literal["raise", "warn", "ignore"] = "warn"
     infer_contract: bool = True
+    fingerprint_on_fit: bool = False
     verbose: bool = True
 
     def __post_init__(self) -> None:
