@@ -13,9 +13,15 @@ exactly as it did when the library shipped as a single module.
 from __future__ import annotations
 
 from ._version import __version__
+from .artifacts import (
+    assert_schema_stable,
+    compare_fingerprints,
+    fingerprint_dataframe,
+)
 from .cleaner import DataCleaner
 from .config import CleanerConfig
 from .contract import ColumnSpec, DataContract, DriftReport
+from .decisions import CleaningDecision
 from .profiling import (
     assert_frame_clean,
     dataset_summary,
@@ -25,13 +31,17 @@ from .profiling import (
 
 __all__ = [
     "CleanerConfig",
+    "CleaningDecision",
     "ColumnSpec",
     "DataCleaner",
     "DataContract",
     "DriftReport",
     "__version__",
     "assert_frame_clean",
+    "assert_schema_stable",
+    "compare_fingerprints",
     "dataset_summary",
     "drop_duplicate_rows",
+    "fingerprint_dataframe",
     "profile_dataframe",
 ]
