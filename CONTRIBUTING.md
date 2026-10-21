@@ -38,6 +38,19 @@ uv run pre-commit install
 
 `pre-commit` runs ruff, formatting, and mypy on every commit.
 
+## Agent-assisted contributions (OpenCode)
+
+This repository ships an OpenCode V2 configuration in `opencode.jsonc`, project
+instructions in `AGENTS.md`, and reusable commands in `.opencode/`. The
+configuration defaults shell commands to approval, blocks secret reads and
+destructive operations, requires approval for network access, and disables Code
+Mode so its built-in `fetch` cannot bypass web approvals.
+
+Use `/check` to run the full quality gate and `/review` for a read-only review.
+Do not weaken the configuration or bypass an approval; see `AGENTS.md` for the
+full safety and data-leakage rules. Do not run OpenCode with `--auto`, which
+auto-approves permission prompts.
+
 ## Before opening a pull request
 
 ```bash
