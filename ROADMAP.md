@@ -251,10 +251,11 @@ to the existing transformer, so it should not gate the core value.
 
 ## 5. Package structure
 
-**Package shipped in `v2.2.0`; audit modules added in `v2.3.0`.** The single
-`data_cleaner.py` module was split into a typed `src/data_cleaner/` package with
-a PEP 561 `py.typed` marker, while keeping the public import path and the
-pickled-artifact qualified name stable.
+**Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
+integration modules added in `v2.4.0`.** The single `data_cleaner.py` module was
+split into a typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker,
+while keeping the public import path and the pickled-artifact qualified name
+stable.
 
 ```text
 src/data_cleaner/
@@ -266,11 +267,12 @@ src/data_cleaner/
 ├── config.py          # CleanerConfig
 ├── cleaner.py         # DataCleaner
 ├── decisions.py       # CleaningDecision, decision log
-└── profiling.py       # profile_dataframe, dataset_summary, helpers
+├── integration.py     # join diagnostics, referential integrity, dedup
+├── profiling.py       # profile_dataframe, dataset_summary, helpers
+└── validation.py      # expectations, ValidationReport
 ```
 
-Future tiers add modules alongside these: `validation.py`, `integration.py`,
-`ml_audit.py`, and `ingestion.py`.
+Future tiers add modules alongside these: `ml_audit.py` and `ingestion.py`.
 
 Compatibility rules:
 
@@ -330,9 +332,12 @@ GitHub release, let `publish.yml` handle PyPI.
 
 ## 9. Current step
 
-Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), and Tier 2
-(`v2.3.0`: decision log, manifest, fingerprints) are shipped.
+Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), Tier 2
+(`v2.3.0`: decision log, manifest, fingerprints), and Tier 3 (`v2.4.0`:
+expectations, contract validation, join diagnostics, referential integrity, and
+audited deduplication) are shipped.
 
-Implement **Tier 3 (`v2.4.0`)**: validation and integration diagnostics —
-`diagnose_join`, `check_referential_integrity`, a lightweight expectations API,
-and `ValidationReport`.
+Implement **Tier 4 (`v2.5.0`)**: ML split/leakage audit — `audit_split()` with
+duplicate/near-duplicate overlap, group leakage, temporal leakage,
+target-leakage heuristics, constant/high-cardinality columns, distribution
+shift, and severity-tagged findings. It only reports; it never auto-fixes.

@@ -208,6 +208,110 @@ restored = DataContract.from_json(payload)
 # restored = DataContract.from_yaml(contract.to_yaml())
 ```
 
+## Expectations, joins, and referential integrity
+
+### Expectations and validation reports
+
+Run lightweight expectations against any batch and get a shareable report:
+
+```python
+from data_cleaner import (
+    between,
+    has_dtype,
+    in_set,
+    matches_pattern,
+    not_null,
+    row_count_between,
+    unique,
+    validate,
+)
+
+report = validate(
+    orders_new,
+    [
+        not_null("order_id"),
+        unique("order_id"),
+        in_set("status", ["new", "paid", "shipped"]),
+        between("amount", 0, 100_000),
+        matches_pattern("email", r"[^@]+@[^@]+\.[^@]+"),
+        has_dtype("created_at", "datetime"),
+        row_count_between(min_rows=1),
+    ],
+)
+print(report.to_markdown())
+report.raise_if_failed()
+```
+
+`report.success` is true when no error-severity expectation failed.
+`report.failures` includes warnings too, so use `severity="warning"` for soft
+checks. `has_dtype` accepts broad kinds (`numeric`, `categorical`, `boolean`,
+`datetime`) or an exact pandas dtype such as `float64`.
+
+Contracts can validate a batch directly and return the same report type:
+
+```python
+from data_cleaner import DataContract
+
+contract = DataContract.from_frame(orders_train)
+result = contract.validate(orders_new)
+result.failures.to_markdown()
+```
+
+`Contract` is a shorthand alias for `DataContract`.
+
+### Join diagnostics
+
+```python
+from data_cleaner import diagnose_join
+
+report = diagnose_join(orders, customers, on="customer_id", how="left")
+
+report.safe  # False on cardinality mismatch, left/right row multiplication, or null keys
+report.cardinality  # e.g. "1:m"
+report.row_multiplier  # output rows / left rows
+report.unmatched_left
+report.unmatched_right
+report.warnings
+report.raise_if_unsafe()
+```
+
+`diagnose_join` defaults to `how="left"` and `validate="1:1"`. It reports
+duplicate keys, null keys, unmatched rows, and the actual output row count
+without materializing the full joined frame.
+
+### Referential integrity
+
+```python
+from data_cleaner import check_referential_integrity
+
+report = check_referential_integrity(
+    orders, customers, child_key="customer_id", parent_key="id"
+)
+report.orphan_rows
+report.orphan_keys
+report.raise_if_invalid()
+```
+
+Null child keys are reported but allowed by default (`allow_null_keys=True`).
+Duplicate parent keys make the relationship invalid because the parent key is
+not a unique reference target.
+
+### Business-key deduplication
+
+```python
+from data_cleaner import deduplicate_by_business_key
+
+deduped, report = deduplicate_by_business_key(
+    orders, key="order_id", keep="last", tie_breaker="updated_at"
+)
+report.removed_rows
+report.removed  # the actual rows that were dropped
+```
+
+The returned frame preserves the input row order and index. `tie_breaker`
+prefers non-null values, and null business keys are reported explicitly.
+The input frame is never mutated.
+
 ## Audit trail, manifests, and fingerprints
 
 Every learned or configured decision is recorded during `fit()` and exposed as
@@ -304,7 +408,21 @@ predictions = pipeline.predict(X_test)
 | `CleaningDecision` | One auditable learned or configured decision |
 | `ColumnSpec` | Declarative expectations and semantics for one column |
 | `DataContract` | A set of column specs, with inference and (de)serialization |
+| `Contract` | Shorthand alias for `DataContract` |
+| `DataContract.validate()` | Check a batch and return a `ValidationReport` |
 | `DriftReport` | Findings from a contract check, with a Markdown summary |
+| `Expectation` | One reusable expectation produced by a factory |
+| `validate` | Evaluate expectations against a frame |
+| `not_null`, `unique`, `in_set`, `between` | Expectation factories |
+| `matches_pattern`, `has_dtype` | Expectation factories |
+| `row_count_between` | Frame-level row-count expectation |
+| `ValidationReport` | Pass/fail results, failures table, Markdown, and raise helper |
+| `diagnose_join` | Diagnose key duplication, cardinality, and row multiplication |
+| `JoinDiagnosis` | Join report with multiplier, unmatched counts, and warnings |
+| `check_referential_integrity` | Find orphan child keys and non-unique parent keys |
+| `ReferentialIntegrityReport` | Orphan counts/keys, null keys, and validity |
+| `deduplicate_by_business_key` | Deduplicate by key and report removed rows |
+| `DeduplicationReport` | Removed rows, duplicate-key counts, and tie-breaker details |
 | `DataCleaner.drift_report()` | Drift findings from the last `transform` |
 | `DataCleaner.fitted_contract()` | The contract used by the fitted cleaner |
 | `DataCleaner.decision_log()` | Tidy DataFrame of cleaning decisions |
@@ -348,13 +466,18 @@ predictions = pipeline.predict(X_test)
 │   ├── __init__.py                    # public API re-exports
 │   ├── _version.py                    # version metadata
 │   ├── _roles.py                      # semantic roles and dtype helpers
+│   ├── artifacts.py                   # fingerprints and runtime metadata
 │   ├── contract.py                    # ColumnSpec / DataContract / DriftReport
 │   ├── config.py                      # CleanerConfig
 │   ├── cleaner.py                     # DataCleaner
+│   ├── decisions.py                   # CleaningDecision and decision log
+│   ├── integration.py                 # joins, referential integrity, dedup
 │   ├── profiling.py                   # profiling and validation helpers
+│   ├── validation.py                  # expectations and ValidationReport
 │   └── py.typed                       # PEP 561 marker
 ├── Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
-├── tests/test_data_cleaner.py         # unit and integration tests
+├── tests/test_data_cleaner.py         # core unit and integration tests
+├── tests/test_validation.py           # expectations and integration tests
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
 ├── .pre-commit-config.yaml            # local lint/format/type hooks
