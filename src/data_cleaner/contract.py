@@ -16,6 +16,7 @@ from ._roles import (
     _normalize_role,
     _series_kind,
 )
+from .validation import ValidationReport
 
 if TYPE_CHECKING:
     from .config import CleanerConfig
@@ -216,6 +217,20 @@ class DataContract:
                 )
             )
         return cls(columns=tuple(specs), strict=strict)
+
+    @classmethod
+    def from_frame(
+        cls,
+        frame: pd.DataFrame,
+        config: CleanerConfig | None = None,
+        strict: bool = True,
+    ) -> DataContract:
+        """Infer a contract from ``frame`` (alias for :meth:`infer_from`)."""
+        return cls.infer_from(frame, config=config, strict=strict)
+
+    def validate(self, frame: pd.DataFrame) -> ValidationReport:
+        """Check ``frame`` against this contract and return a validation report."""
+        return ValidationReport.from_findings(self.check(frame).findings)
 
     @staticmethod
     def _finding(
@@ -427,3 +442,7 @@ class DataContract:
                 "`pip install pyyaml` or use to_json()/from_json()."
             ) from exc
         return cls.from_dict(yaml.safe_load(text))
+
+
+#: Shorthand alias for :class:`DataContract`.
+Contract = DataContract

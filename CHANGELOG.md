@@ -5,6 +5,37 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-10-22
+
+### Added
+
+- Lightweight expectations API: `not_null()`, `unique()`, `in_set()`,
+  `between()`, `matches_pattern()`, `has_dtype()`, and
+  `row_count_between()`, plus `Expectation`, `ValidationResult`,
+  `ValidationReport`, and `validate()`. Reports expose `success`, `results`,
+  `failures`, `to_markdown()`, and `raise_if_failed()`.
+- `DataContract.from_frame()` and `DataContract.validate()`; `Contract` is a
+  shorthand alias for `DataContract`.
+- `diagnose_join()` and `JoinDiagnosis`: left/right duplicate keys, cardinality
+  class, output row multiplier, unmatched counts, null keys, warnings, and
+  `raise_if_unsafe()`.
+- `check_referential_integrity()` and `ReferentialIntegrityReport`: orphan
+  rows and keys, null keys, duplicate parent keys, and `raise_if_invalid()`.
+- `deduplicate_by_business_key()` and `DeduplicationReport`: audited removal
+  with the actual removed rows, duplicate-key counts, null-key warnings, and
+  tie-breaker details.
+
+### Changed
+
+- None. Tier 3 is additive and the artifact format remains `2`.
+
+### Notes
+
+- All new helpers are pure functions: they never mutate their inputs and do
+  not require fitting.
+- `ValidationReport.success` ignores warning-severity failures;
+  `raise_if_failed()` raises only for error-severity failures.
+
 ## [2.3.0] - 2026-10-20
 
 ### Added
