@@ -1,6 +1,7 @@
 # Universal Data Cleaner
 
 [![CI](https://github.com/devlprkhan/universal-data-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/devlprkhan/universal-data-cleaner/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-online-4f46e5.svg)](https://devlprkhan.github.io/universal-data-cleaner/)
 [![PyPI](https://img.shields.io/pypi/v/universal-data-cleaner.svg)](https://pypi.org/project/universal-data-cleaner/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
@@ -525,6 +526,8 @@ predictions = pipeline.predict(X_test)
 ├── tests/test_data_cleaner.py         # core unit and integration tests
 ├── tests/test_validation.py           # expectations and integration tests
 ├── tests/test_ml_audit.py             # split/leakage audit tests
+├── docs/                              # MkDocs guides, API page, and assets
+├── mkdocs.yml                         # documentation site configuration
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
 ├── .pre-commit-config.yaml            # local lint/format/type hooks

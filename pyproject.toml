@@ -50,6 +50,10 @@ Issues = "https://github.com/devlprkhan/universal-data-cleaner/issues"
 Changelog = "https://github.com/devlprkhan/universal-data-cleaner/blob/main/CHANGELOG.md"
 
 [dependency-groups]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
 dev = [
     "ipykernel>=7.3.0",
     "jupyterlab>=4.6.4",

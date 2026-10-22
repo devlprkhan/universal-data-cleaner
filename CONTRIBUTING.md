@@ -51,6 +51,19 @@ Do not weaken the configuration or bypass an approval; see `AGENTS.md` for the
 full safety and data-leakage rules. Do not run OpenCode with `--auto`, which
 auto-approves permission prompts.
 
+## Documentation
+
+The documentation site is built with MkDocs Material from `docs/`.
+
+```bash
+uv sync --group docs
+uv run --group docs mkdocs serve
+uv run --group docs mkdocs build --strict
+```
+
+CI builds the docs on every pull request. Pushes to `main` deploy the site to
+GitHub Pages.
+
 ## Before opening a pull request
 
 ```bash

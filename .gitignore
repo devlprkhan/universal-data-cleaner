@@ -13,6 +13,7 @@ htmlcov/
 artifacts/
 build/
 dist/
+site/
 *.egg-info/
 
 # Local secrets and credentials (never commit)
