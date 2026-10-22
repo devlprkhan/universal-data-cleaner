@@ -12,6 +12,21 @@ A small, production-oriented tabular cleaning transformer for pandas + scikit-le
 It is designed for the part of an ML pipeline that is easy to get wrong: cleaning
 training data and inference data with **exactly the same learned rules**.
 
+## Documentation
+
+The full documentation is the central reference:
+
+**[devlprkhan.github.io/universal-data-cleaner](https://devlprkhan.github.io/universal-data-cleaner/)**
+
+- [Quickstart](https://devlprkhan.github.io/universal-data-cleaner/quickstart/)
+- [Leak-safe workflow](https://devlprkhan.github.io/universal-data-cleaner/leak-safe-workflow/)
+- [Cleaning guide](https://devlprkhan.github.io/universal-data-cleaner/cleaning/)
+- [Contracts & drift](https://devlprkhan.github.io/universal-data-cleaner/contracts/)
+- [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/)
+- [ML split audit](https://devlprkhan.github.io/universal-data-cleaner/ml-split-audit/)
+- [API reference](https://devlprkhan.github.io/universal-data-cleaner/api/)
+- [Changelog](https://devlprkhan.github.io/universal-data-cleaner/changelog/)
+
 ## Why this exists
 
 A common notebook pattern is:
