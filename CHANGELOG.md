@@ -11,6 +11,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - Add a MkDocs Material documentation site with task guides, an API reference,
   and GitHub Pages deployment.
+- Expose the documentation site in the package project URLs and README so PyPI
+  and GitHub point to the same central reference.
 
 ## [2.5.0] - 2026-10-22
 
