@@ -1,6 +1,7 @@
 # Leak-safe workflow
 
 The library exists because of one deceptively simple bug.
+{: .lead }
 
 ## The bug
 

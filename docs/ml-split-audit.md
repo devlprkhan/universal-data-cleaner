@@ -1,6 +1,7 @@
 # ML split audit
 
 Cleaning rules can leak. So can the split itself.
+{: .lead }
 
 `audit_split()` checks a train/test split for contamination and distribution
 surprises **before** you train. It only reports; it never repairs, reorders, or

@@ -1,10 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="udc-favicon-gradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4f46e5"/>
-      <stop offset="1" stop-color="#0d9488"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="16" fill="url(#udc-favicon-gradient)"/>
-  <path d="M17 33.5 25.5 42 47 21.5" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="64" height="64" rx="14" fill="#0b4a43"/>
+  <path d="M16 21h30M16 32h18M16 43h11" fill="none" stroke="#f7faf8" stroke-width="5" stroke-linecap="round"/>
+  <path d="m38 41 5 5 11-13" fill="none" stroke="#e8b36a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

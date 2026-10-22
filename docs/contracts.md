@@ -3,6 +3,7 @@
 A contract makes the assumptions about your data explicit. The cleaner can then
 check those assumptions on every transform and report drift instead of silently
 producing a different schema.
+{: .lead }
 
 ## A small contract
 

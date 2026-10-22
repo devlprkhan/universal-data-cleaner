@@ -3,6 +3,7 @@
 `DataCleaner` applies a small, opinionated set of cleaning rules and records
 every decision it makes. This page covers the available options and how each
 column kind is treated.
+{: .lead }
 
 ## Configuration at a glance
 
@@ -77,10 +78,10 @@ config = CleanerConfig(
 With `cap_outliers=True`, the cleaner learns lower and upper IQR bounds from the
 training column:
 
-\[
-\text{lower} = Q_1 - k \cdot IQR, \qquad
-\text{upper} = Q_3 + k \cdot IQR
-\]
+<div class="formula" role="math" aria-label="lower equals Q 1 minus k times I Q R; upper equals Q 3 plus k times I Q R">
+  <span>lower = Q<sub>1</sub> − k · IQR</span>
+  <span>upper = Q<sub>3</sub> + k · IQR</span>
+</div>
 
 where `k` is `outlier_multiplier`. Values outside the bounds are clipped, not
 removed. If the IQR is zero, capping is skipped so constant or near-constant

@@ -3,6 +3,7 @@
 A cleaner that works in a notebook can still fail in production. This page is the
 deployment checklist: what to fit, what to store, and what to check on every
 batch.
+{: .lead }
 
 ## The short checklist
 
