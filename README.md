@@ -40,6 +40,7 @@ breaks at inference time because the median is recomputed on the new batch.
 - automatic train-schema contract inference and transform-time drift reports
 - `on_drift` policy: `raise`, `warn`, or `ignore`
 - identifier columns that are never numeric-coerced, median-imputed, or capped
+- train/test split audits for duplicate, group, temporal, and target leakage
 - joblib save / load with artifact versioning
 - scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility
 
@@ -312,6 +313,48 @@ The returned frame preserves the input row order and index. `tie_breaker`
 prefers non-null values, and null business keys are reported explicitly.
 The input frame is never mutated.
 
+## ML split audits
+
+Audit a train/test split for contamination and distribution surprises before
+training:
+
+```python
+from data_cleaner import audit_split
+
+audit = audit_split(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    groups=groups,  # combined train+test labels, or pass groups_test=
+    time_col="event_time",
+    id_cols=["customer_id"],
+)
+
+audit.valid  # False when an error-severity finding exists
+audit.findings  # check, column, severity, message, train, test
+audit.summary()
+audit.to_markdown()
+audit.raise_if_invalid()
+```
+
+Schema problems such as missing columns, empty splits, exact duplicate overlap,
+group leakage, temporal leakage, and unparseable or numeric timestamps are
+errors. Near-duplicates, constant / near-constant columns, high-cardinality
+identifiers, missingness and distribution shift, target-leakage heuristics, and
+target shift are warnings because they can be legitimate properties of a
+dataset. The audit only reports; it never repairs or reorders a split.
+
+`groups` may hold labels for both splits (`len(X_train) + len(X_test)`); pass
+`groups_test` when it only covers the training rows. Duplicate checks exclude
+`id_cols` and `time_col`; declared identifiers are still reported under
+`high_cardinality_identifier` when their cardinality is high. Near-duplicates
+are approximated deterministically by hashing rows with numeric features
+rounded to `near_duplicate_decimals` (default `3`).
+
+Findings never include raw cell values. Messages carry column names, counts,
+rates, and statistics only, so reports can be logged safely.
+
 ## Audit trail, manifests, and fingerprints
 
 Every learned or configured decision is recorded during `fit()` and exposed as
@@ -423,6 +466,8 @@ predictions = pipeline.predict(X_test)
 | `ReferentialIntegrityReport` | Orphan counts/keys, null keys, and validity |
 | `deduplicate_by_business_key` | Deduplicate by key and report removed rows |
 | `DeduplicationReport` | Removed rows, duplicate-key counts, and tie-breaker details |
+| `audit_split` | Audit a train/test split for leakage and distribution shift |
+| `SplitAudit` | Findings table with validity, Markdown, and raise helper |
 | `DataCleaner.drift_report()` | Drift findings from the last `transform` |
 | `DataCleaner.fitted_contract()` | The contract used by the fitted cleaner |
 | `DataCleaner.decision_log()` | Tidy DataFrame of cleaning decisions |
@@ -472,12 +517,14 @@ predictions = pipeline.predict(X_test)
 │   ├── cleaner.py                     # DataCleaner
 │   ├── decisions.py                   # CleaningDecision and decision log
 │   ├── integration.py                 # joins, referential integrity, dedup
+│   ├── ml_audit.py                    # train/test leakage and shift audit
 │   ├── profiling.py                   # profiling and validation helpers
 │   ├── validation.py                  # expectations and ValidationReport
 │   └── py.typed                       # PEP 561 marker
 ├── Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
 ├── tests/test_data_cleaner.py         # core unit and integration tests
 ├── tests/test_validation.py           # expectations and integration tests
+├── tests/test_ml_audit.py             # split/leakage audit tests
 ├── pyproject.toml                     # package metadata and dev tooling
 ├── uv.lock                            # reproducible dependency lock
 ├── .pre-commit-config.yaml            # local lint/format/type hooks
