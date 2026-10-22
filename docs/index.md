@@ -151,5 +151,29 @@ them, and exposes the decisions it made.
 - Train/test split audits for duplicate, group, temporal, and target leakage
 - Stable fingerprints and JSON-serializable manifests
 
+## Go deeper
+
+<div class="grid cards" markdown>
+
+-   :material-package-variant:{ .lg .middle } **Artifacts & reproducibility**
+
+    ---
+
+    Record decisions, build manifests, compare fingerprints, and reload the
+    exact fitted rules.
+
+    [:octicons-arrow-right-24: Artifacts & reproducibility](artifacts.md)
+
+-   :material-rocket-launch-outline:{ .lg .middle } **Production guide**
+
+    ---
+
+    A deployment checklist for strict contracts, drift policies, artifact
+    bundles, and common failure modes.
+
+    [:octicons-arrow-right-24: Production guide](production.md)
+
+</div>
+
 Ready to try it? Start with the [quickstart](quickstart.md), or read the
 [leak-safe workflow](leak-safe-workflow.md) first.
