@@ -90,7 +90,9 @@ nav:
       - Contracts & drift: contracts.md
       - Validation, joins & dedup: validation-joins.md
       - ML split audit: ml-split-audit.md
+      - Production guide: production.md
   - Reference:
+      - Artifacts & reproducibility: artifacts.md
       - API: api.md
       - Changelog: changelog.md
   - GitHub: https://github.com/devlprkhan/universal-data-cleaner

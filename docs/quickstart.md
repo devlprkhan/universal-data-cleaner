@@ -154,4 +154,20 @@ cleaner.drift_report()  # findings from the last transform
 
     [:octicons-arrow-right-24: ML split audit](ml-split-audit.md)
 
+-   :material-package-variant:{ .lg .middle } **Save the rules**
+
+    ---
+
+    Record decisions, build manifests, and reload the exact fitted cleaner.
+
+    [:octicons-arrow-right-24: Artifacts & reproducibility](artifacts.md)
+
+-   :material-rocket-launch-outline:{ .lg .middle } **Deploy safely**
+
+    ---
+
+    Use strict contracts, explicit drift policies, and a production checklist.
+
+    [:octicons-arrow-right-24: Production guide](production.md)
+
 </div>
