@@ -1,5 +1,6 @@
 site_name: Universal Data Cleaner
 site_description: Leak-safe data cleaning for pandas and scikit-learn.
+site_author: Haseeb Khan
 site_url: https://devlprkhan.github.io/universal-data-cleaner/
 repo_url: https://github.com/devlprkhan/universal-data-cleaner
 repo_name: devlprkhan/universal-data-cleaner
@@ -11,36 +12,55 @@ theme:
   language: en
   logo: assets/logo.svg
   favicon: assets/favicon.svg
+  font:
+    text: IBM Plex Sans
+    code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.indexes
     - navigation.top
     - navigation.footer
+    - navigation.tracking
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
     - content.code.select
     - content.action.edit
+    - content.tabs.link
+    - content.tooltips
     - toc.follow
 
 extra_css:
   - assets/extra.css
+
+extra_javascript:
+  - assets/extra.js
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/devlprkhan/universal-data-cleaner
+      name: GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/universal-data-cleaner/
+      name: PyPI
 
 plugins:
   - search
@@ -67,6 +87,7 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+      toc_depth: 3
   - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
@@ -82,7 +103,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting started:
+  - Start here:
       - Quickstart: quickstart.md
       - Leak-safe workflow: leak-safe-workflow.md
   - Guides:
@@ -92,7 +113,8 @@ nav:
       - ML split audit: ml-split-audit.md
       - Production guide: production.md
   - Reference:
+      - API reference: api.md
       - Artifacts & reproducibility: artifacts.md
-      - API: api.md
       - Changelog: changelog.md
+  - PyPI: https://pypi.org/project/universal-data-cleaner/
   - GitHub: https://github.com/devlprkhan/universal-data-cleaner

@@ -1,6 +1,7 @@
 # Quickstart
 
 Get from a messy DataFrame to a fitted, reusable cleaner in a few minutes.
+{: .lead }
 
 ## Install
 
@@ -41,7 +42,11 @@ train = pd.DataFrame(
         "age": [34, 41, None, 29],
         "salary": [70_000, 82_000, 91_000, 55_000],
         "dept": ["IT", "HR", "IT", None],
-        "joined": ["2022-01-03", "2021-11-20", "2023-04-01", "bad-date"],
+        "joined": pd.to_datetime(
+            ["2022-01-03", "2021-11-20", "2023-04-01", "bad-date"],
+            format="mixed",
+            errors="coerce",
+        ),
     }
 )
 
@@ -60,8 +65,10 @@ train_clean = cleaner.transform(train)
 - numeric columns imputed with the training median
 - categorical columns imputed with the training mode
 - `joined` replaced by calendar features
-- an `age__is_missing` indicator
+- missing indicators for `age`, `dept`, and `joined`
 - the same column order every time
+
+`train_clean` is a new DataFrame; `train` itself is not modified.
 
 ## What `fit` and `transform` mean
 
@@ -105,6 +112,13 @@ predictions = pipeline.predict(X_test)
 Because `DataCleaner` implements the scikit-learn estimator interface,
 `Pipeline`, `clone`, and cross-validation work as expected.
 
+!!! note "Constant columns and cross-validation"
+
+    With `drop_constant_columns=True`, a generated calendar feature can be
+    constant inside a training fold and get dropped. If a downstream step
+    hard-codes that feature, set `drop_constant_columns=False` or select the
+    cleaner's output columns dynamically.
+
 ## Save the fitted cleaner
 
 ```python
@@ -128,46 +142,23 @@ cleaner.drift_report()  # findings from the last transform
 
 ## Where to go next
 
-<div class="grid cards" markdown>
+<div class="doc-links" markdown>
+<div markdown>
+<p class="doc-links__title">Understand the contract</p>
 
--   :material-shield-check:{ .lg .middle } **Leak-safe workflow**
+- [Leak-safe workflow](leak-safe-workflow.md): the fit/transform contract and the mistakes it prevents.
+- [Cleaning data](cleaning.md): every configuration option and what it changes.
+</div>
+<div markdown>
+<p class="doc-links__title">Check the inputs</p>
 
-    ---
+- [ML split audit](ml-split-audit.md): duplicates, group leakage, temporal leakage, and target leakage.
+- [Validation, joins & dedup](validation-joins.md): expectations, join diagnostics, and business-key dedup.
+</div>
+<div markdown>
+<p class="doc-links__title">Ship the rules</p>
 
-    Understand the fit/transform contract and the mistakes it prevents.
-
-    [:octicons-arrow-right-24: Read the workflow](leak-safe-workflow.md)
-
--   :material-tune-variant:{ .lg .middle } **Cleaning options**
-
-    ---
-
-    See every configuration option and what it changes.
-
-    [:octicons-arrow-right-24: Cleaning guide](cleaning.md)
-
--   :material-magnify-scan:{ .lg .middle } **Audit your split**
-
-    ---
-
-    Check for duplicates, group leakage, temporal leakage, and target leakage.
-
-    [:octicons-arrow-right-24: ML split audit](ml-split-audit.md)
-
--   :material-package-variant:{ .lg .middle } **Save the rules**
-
-    ---
-
-    Record decisions, build manifests, and reload the exact fitted cleaner.
-
-    [:octicons-arrow-right-24: Artifacts & reproducibility](artifacts.md)
-
--   :material-rocket-launch-outline:{ .lg .middle } **Deploy safely**
-
-    ---
-
-    Use strict contracts, explicit drift policies, and a production checklist.
-
-    [:octicons-arrow-right-24: Production guide](production.md)
-
+- [Artifacts & reproducibility](artifacts.md): decisions, manifests, fingerprints, and save/load.
+- [Production guide](production.md): strict contracts, drift policies, and a deployment checklist.
+</div>
 </div>

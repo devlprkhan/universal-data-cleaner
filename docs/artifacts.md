@@ -3,6 +3,7 @@
 A fitted cleaner is only useful if the next process can prove it is using the
 same rules. This page covers the audit trail, manifests, fingerprints, and saved
 artifacts that make that possible.
+{: .lead }
 
 ## The decision log
 

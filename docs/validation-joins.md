@@ -3,6 +3,7 @@
 Cleaning a frame is only part of data quality. These helpers check values,
 diagnose joins, verify references, and deduplicate business keys without
 surprises.
+{: .lead }
 
 ## Expectations
 

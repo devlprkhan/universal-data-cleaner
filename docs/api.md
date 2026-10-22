@@ -1,11 +1,30 @@
+---
+description: API reference for Universal Data Cleaner.
+---
+
 # API reference
 
-This page is generated from the package docstrings. All names are importable
-directly from `data_cleaner`.
+This page is generated from the package docstrings. Every public name is
+importable directly from `data_cleaner`.
+{: .lead }
 
 ```python
 from data_cleaner import DataCleaner, audit_split, validate
 ```
+
+## Start here
+
+| Object | Use it for |
+| --- | --- |
+| [`DataCleaner`](#data_cleaner.DataCleaner) | Fit cleaning rules on training data and transform later batches |
+| [`CleanerConfig`](#data_cleaner.CleanerConfig) | Configure imputation, outliers, datetime features, contracts, and drift policy |
+| [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
+| [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
+| [`audit_split`](#data_cleaner.audit_split) | Check a train/test split for leakage before training |
+
+The usual path is `CleanerConfig` → `DataCleaner.fit()` → `DataCleaner.transform()`.
+Contracts, validation, and the split audit are independent tools you can adopt
+incrementally.
 
 ## Cleaning
 
@@ -86,3 +105,15 @@ from data_cleaner import DataCleaner, audit_split, validate
 ::: data_cleaner.drop_duplicate_rows
 
 ::: data_cleaner.assert_frame_clean
+
+## API conventions
+
+- All public names are re-exported from the package root, so `from data_cleaner
+  import ...` is the supported import style.
+- Configuration objects are immutable dataclasses; create a new one when options
+  change.
+- Learned state lives on the fitted `DataCleaner`, not on the input DataFrame.
+- Reports expose structured attributes plus `to_markdown()` where available, so
+  they can be logged or attached to a model review.
+- The generated signatures show the exact accepted types. The guides include
+  complete, runnable examples for the common paths.
