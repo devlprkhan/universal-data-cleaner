@@ -7,7 +7,7 @@ hide:
 <div class="hero" markdown>
 <div class="hero__copy" markdown>
 
-# Clean data. Keep the leak out.
+# Clean data.<br>Keep the leak out.
 
 Universal Data Cleaner is a scikit-learn-compatible transformer that learns
 cleaning rules from training data only, then applies those exact rules to every
@@ -199,10 +199,17 @@ the contract and manifest next to the model.
 </div>
 </div>
 
+<div class="home-cta" markdown>
+<div class="home-cta__copy" markdown>
+
 ## Start with the quickstart
 
 Install the package, fit one cleaner, and transform a test batch without
 re-learning. The quickstart is the shortest path from a messy DataFrame to a
 reusable preprocessing step.
 
+</div>
+<div class="home-cta__action" markdown>
 [Open the quickstart](quickstart.md){ .md-button .md-button--primary }
+</div>
+</div>
