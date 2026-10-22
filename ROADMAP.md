@@ -252,7 +252,8 @@ to the existing transformer, so it should not gate the core value.
 ## 5. Package structure
 
 **Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
-integration modules added in `v2.4.0`.** The single `data_cleaner.py` module was
+integration modules added in `v2.4.0`; the ML split audit was added in
+`v2.5.0`.** The single `data_cleaner.py` module was
 split into a typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker,
 while keeping the public import path and the pickled-artifact qualified name
 stable.
@@ -268,11 +269,12 @@ src/data_cleaner/
 ├── cleaner.py         # DataCleaner
 ├── decisions.py       # CleaningDecision, decision log
 ├── integration.py     # join diagnostics, referential integrity, dedup
+├── ml_audit.py        # audit_split, SplitAudit
 ├── profiling.py       # profile_dataframe, dataset_summary, helpers
 └── validation.py      # expectations, ValidationReport
 ```
 
-Future tiers add modules alongside these: `ml_audit.py` and `ingestion.py`.
+Future tiers add modules alongside these: `ingestion.py`.
 
 Compatibility rules:
 
@@ -296,6 +298,9 @@ Compatibility rules:
   the whole CI matrix.
 - **Pure-function correctness**: compare `diagnose_join` against hand-computed
   pandas cardinalities on 1:1, 1:m, m:m, empty, and all-unmatched cases.
+- **Split audit matrix**: for each leakage or shift check, construct a
+  contaminated split and assert the exact finding severity and column, plus a
+  clean split with no findings and an input-mutation test.
 - **Property-based tests** (optional `hypothesis` dev dep) for dedup and
   fingerprint stability.
 - **Golden notebook**: keep executing `Universal_Data_Cleaner.ipynb` headlessly
@@ -333,11 +338,13 @@ GitHub release, let `publish.yml` handle PyPI.
 ## 9. Current step
 
 Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), Tier 2
-(`v2.3.0`: decision log, manifest, fingerprints), and Tier 3 (`v2.4.0`:
+(`v2.3.0`: decision log, manifest, fingerprints), Tier 3 (`v2.4.0`:
 expectations, contract validation, join diagnostics, referential integrity, and
-audited deduplication) are shipped.
+audited deduplication), and Tier 4 (`v2.5.0`: `audit_split()` with duplicate and
+near-duplicate overlap, group leakage, temporal leakage, target-leakage
+heuristics, constant/high-cardinality columns, distribution shift, target shift,
+and severity-tagged findings) are shipped.
 
-Implement **Tier 4 (`v2.5.0`)**: ML split/leakage audit — `audit_split()` with
-duplicate/near-duplicate overlap, group leakage, temporal leakage,
-target-leakage heuristics, constant/high-cardinality columns, distribution
-shift, and severity-tagged findings. It only reports; it never auto-fixes.
+Implement **Tier 5 (`v2.6.0`)**: safe ingestion — `read_csv_safe()` that reads
+as strings first, coerces under contract control, and emits an ingestion report
+instead of silently inferring types.

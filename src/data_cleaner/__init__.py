@@ -30,6 +30,7 @@ from .integration import (
     deduplicate_by_business_key,
     diagnose_join,
 )
+from .ml_audit import SplitAudit, audit_split
 from .profiling import (
     assert_frame_clean,
     dataset_summary,
@@ -62,11 +63,13 @@ __all__ = [
     "Expectation",
     "JoinDiagnosis",
     "ReferentialIntegrityReport",
+    "SplitAudit",
     "ValidationReport",
     "ValidationResult",
     "__version__",
     "assert_frame_clean",
     "assert_schema_stable",
+    "audit_split",
     "between",
     "check_referential_integrity",
     "compare_fingerprints",

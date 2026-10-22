@@ -3515,7 +3515,7 @@ wheels = [
 
 [[package]]
 name = "universal-data-cleaner"
-version = "2.4.0"
+version = "2.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "joblib" },

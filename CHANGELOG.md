@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-10-22
+
+### Added
+
+- `audit_split()` and `SplitAudit`: a pure-function train/test split audit that
+  reports exact duplicate overlap, near-duplicate overlap, group leakage,
+  temporal leakage, target-leakage heuristics, constant and near-constant
+  columns, high-cardinality identifiers, missingness shift, numeric and
+  categorical distribution shift, unseen target classes, and target shift.
+- Findings carry a `check`, `column`, `severity`, `message`, and train/test
+  values. Exact duplicates, group leakage, and temporal leakage are errors;
+  statistical and heuristic checks are warnings.
+- `SplitAudit` exposes `findings`, `valid`, `errors`, `warnings`, `summary()`,
+  `to_markdown()`, `to_dict()`, and `raise_if_invalid()`.
+
+### Changed
+
+- None. Tier 4 is additive and the artifact format remains `2`.
+
+### Notes
+
+- The audit never mutates inputs, never fits anything, and never repairs a
+  split. Duplicate checks exclude declared `id_cols` and `time_col`.
+- Near-duplicates use a deterministic rounded-feature hash rather than a
+  nearest-neighbour search, so the result is reproducible without extra
+  dependencies.
+- `groups` may cover both splits or training rows only when `groups_test` is
+  supplied.
+
 ## [2.4.0] - 2026-10-22
 
 ### Added
