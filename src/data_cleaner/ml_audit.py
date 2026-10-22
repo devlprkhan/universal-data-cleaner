@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Literal
 
 import numpy as np
@@ -52,14 +53,14 @@ class SplitAudit:
     def errors(self) -> pd.DataFrame:
         """Findings with error severity."""
         if self.findings.empty:
-            return self.findings
+            return self.findings.copy()
         return self.findings[self.findings["severity"] == "error"]
 
     @property
     def warnings(self) -> pd.DataFrame:
         """Findings with warning severity."""
         if self.findings.empty:
-            return self.findings
+            return self.findings.copy()
         return self.findings[self.findings["severity"] == "warning"]
 
     @property
@@ -77,12 +78,14 @@ class SplitAudit:
         if self.findings.empty:
             return "no split issues detected"
         lines: list[str] = []
-        for _, row in self.findings.iterrows():
-            column = row["column"]
-            target = f" ({column})" if isinstance(column, str) and column else ""
-            lines.append(
-                f"- [{row['severity']}] {row['check']}{target}: {row['message']}"
+        for check, column, severity, message, _, _ in self.findings.itertuples(
+            index=False, name=None
+        ):
+            present = column is not None and not (
+                isinstance(column, float) and pd.isna(column)
             )
+            target = f" ({column})" if present else ""
+            lines.append(f"- [{severity}] {check}{target}: {message}")
         return "\n".join(lines)
 
     def to_markdown(self) -> str:
@@ -174,6 +177,16 @@ def _is_datetime(series: pd.Series) -> bool:
     return bool(ptypes.is_datetime64_any_dtype(series))
 
 
+def _parse_times(series: pd.Series) -> pd.Series:
+    """Parse timestamps, including mixed text formats, into UTC."""
+    if _is_datetime(series):
+        return pd.to_datetime(series, errors="coerce", utc=True)
+    try:
+        return pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
+    except (TypeError, ValueError):
+        return pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns, UTC]")
+
+
 def _scalar_text(value: Any) -> str | None:
     """Render a scalar deterministically, preserving nulls as ``None``."""
     if value is None:
@@ -202,15 +215,52 @@ def _text_series(series: pd.Series) -> pd.Series:
     return series.astype(object).map(_scalar_text)
 
 
+def _hash_scalar(value: Any) -> str:
+    """Canonical, type-tagged text used for exact duplicate hashing."""
+    if value is None:
+        return "\x00null"
+    if isinstance(value, (bool, np.bool_)):
+        return f"b:{bool(value)}"
+    if isinstance(value, dict):
+        items = sorted((repr(key), repr(item)) for key, item in value.items())
+        return f"r:{items!r}"
+    if isinstance(value, (set, frozenset)):
+        return f"r:{sorted(repr(item) for item in value)!r}"
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return f"r:{value!r}"
+    if isinstance(value, (pd.Timestamp, datetime, date, np.datetime64)):
+        timestamp = pd.Timestamp(value)
+        if timestamp is pd.NaT:
+            return "\x00null"
+        return f"d:{timestamp.isoformat()}"
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return f"r:{value!r}"
+    if isinstance(missing, (bool, np.bool_)) and bool(missing):
+        return "\x00null"
+    if isinstance(value, (int, np.integer)):
+        return f"n:{int(value)}"
+    if isinstance(value, (float, np.floating)):
+        numeric = float(value)
+        if not np.isfinite(numeric):
+            return f"n:{numeric}"
+        if numeric.is_integer():
+            return f"n:{int(numeric)}"
+        return f"n:{numeric!r}"
+    return f"s:{value}"
+
+
+def _hash_series(series: pd.Series) -> pd.Series:
+    return series.astype(object).map(_hash_scalar)
+
+
 def _hash_frame(frame: pd.DataFrame) -> np.ndarray:
-    """Hash rows after making every value hashable and null-stable."""
-    columns: dict[int, np.ndarray] = {}
-    for position, column in enumerate(frame.columns):
-        series = frame[column]
-        if _is_numeric(series) or _is_datetime(series):
-            columns[position] = series.to_numpy()
-        else:
-            columns[position] = _text_series(series).to_numpy()
+    """Hash rows in a dtype-independent, null-stable space."""
+    columns = {
+        position: _hash_series(frame[column]).to_numpy()
+        for position, column in enumerate(frame.columns)
+    }
     normalized = pd.DataFrame(columns)
     if normalized.empty:
         return np.empty(0, dtype=np.uint64)
@@ -222,15 +272,21 @@ def _near_signature(frame: pd.DataFrame, decimals: int) -> np.ndarray:
     parts: list[np.ndarray] = []
     for column in frame.columns:
         series = frame[column]
-        if _is_numeric(series):
+        if _is_numeric(series) and ptypes.is_integer_dtype(series):
+            text = series.astype(object).map(
+                lambda value: "" if pd.isna(value) else f"n:{int(value)}"
+            )
+        elif _is_numeric(series):
             rounded = series.astype(float).round(decimals)
             text = rounded.map(
-                lambda value: "" if pd.isna(value) else f"{float(value):.{decimals}f}"
-            ).astype(str)
-        elif _is_datetime(series):
-            text = series.dt.strftime("%Y-%m-%dT%H:%M:%S").fillna("")
+                lambda value: (
+                    ""
+                    if pd.isna(value)
+                    else f"{0.0 if float(value) == 0 else float(value):.{decimals}f}"
+                )
+            )
         else:
-            text = _text_series(series).fillna("").astype(str)
+            text = _hash_series(series)
         parts.append(
             pd.util.hash_pandas_object(text, index=False).to_numpy(dtype=np.uint64)
         )
@@ -243,10 +299,11 @@ def _near_signature(frame: pd.DataFrame, decimals: int) -> np.ndarray:
     return combined
 
 
-def _overlap_mask(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    if len(left) == 0 or len(right) == 0:
-        return np.zeros(len(left), dtype=bool)
-    return np.isin(left, right)
+def _overlap_mask(candidates: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """Return a mask over ``candidates`` marking matches in ``reference``."""
+    if len(candidates) == 0 or len(reference) == 0:
+        return np.zeros(len(candidates), dtype=bool)
+    return np.isin(candidates, reference)
 
 
 def _stringify_groups(series: pd.Series) -> pd.Series:
@@ -298,8 +355,8 @@ def _encode_target(series: pd.Series) -> pd.Series:
 def _abs_correlation(left: pd.Series, right: pd.Series) -> float | None:
     frame = pd.DataFrame(
         {
-            "left": pd.to_numeric(left, errors="coerce"),
-            "right": pd.to_numeric(right, errors="coerce"),
+            "left": pd.to_numeric(left, errors="coerce").reset_index(drop=True),
+            "right": pd.to_numeric(right, errors="coerce").reset_index(drop=True),
         }
     ).dropna()
     if len(frame) < 10:
@@ -314,7 +371,10 @@ def _abs_correlation(left: pd.Series, right: pd.Series) -> float | None:
 
 def _normalized_mutual_information(left: pd.Series, right: pd.Series) -> float | None:
     frame = pd.DataFrame(
-        {"left": _stringify_groups(left), "right": _stringify_groups(right)}
+        {
+            "left": _stringify_groups(left).reset_index(drop=True),
+            "right": _stringify_groups(right).reset_index(drop=True),
+        }
     ).dropna()
     if len(frame) < 10:
         return None
@@ -411,12 +471,10 @@ def _constant_findings(
             unique = len(counts)
             top_share = float(counts.iloc[0] / len(series))
             if unique <= 1:
-                details.append(f"{name}: constant ({_scalar_text(counts.index[0])!r})")
+                details.append(f"{name}: constant")
                 worst_check = "constant_column"
             elif top_share >= threshold:
-                details.append(
-                    f"{name}: {top_share:.0%} '{_scalar_text(counts.index[0])}'"
-                )
+                details.append(f"{name}: {top_share:.0%} in one value")
                 if worst_check is None:
                     worst_check = "near_constant_column"
         if worst_check is None:
@@ -463,9 +521,15 @@ def _high_cardinality_findings(
         message = "; ".join(details)
         if column in ids:
             message = f"declared identifier column — {message}"
+            _add_finding(
+                findings,
+                "high_cardinality_identifier",
+                column=column,
+                message=message,
+            )
         else:
             message = f"high-cardinality column — {message}"
-        _add_finding(findings, "high_cardinality", column=column, message=message)
+            _add_finding(findings, "high_cardinality", column=column, message=message)
 
 
 def _missingness_findings(
@@ -631,12 +695,12 @@ def _target_shift_findings(
             return
         unseen = sorted(set(test_labels) - set(train_labels))
         if unseen:
-            examples = ", ".join(unseen[:10])
-            more = "" if len(unseen) <= 10 else f" (+{len(unseen) - 10} more)"
             _add_finding(
                 findings,
                 "unseen_target_class",
-                message=f"test target contains classes unseen in train: {examples}{more}",
+                message=(
+                    f"test target contains {len(unseen)} class(es) unseen in train"
+                ),
                 test=len(unseen),
             )
         distance = _total_variation_distance(train_labels, test_labels)
@@ -706,16 +770,20 @@ def audit_split(
     groups_test:
         Group labels for the test rows when ``groups`` only covers train.
     time_col:
-        Optional timestamp column. When supplied, the audit treats the split as
-        temporal and reports train timestamps after the earliest test timestamp.
+        Optional timestamp column (datetime or text). When supplied, the audit
+        treats the split as temporal and reports train timestamps at or after
+        the earliest test timestamp. Numeric timestamp columns are rejected as
+        ambiguous.
     id_cols:
         Optional identifier columns. They are excluded from duplicate,
-        constant, high-cardinality, distribution, and target-leakage checks and
-        are reported as declared identifiers instead.
+        constant, distribution, and target-leakage checks. Declared identifiers
+        are still reported under ``high_cardinality_identifier`` when their
+        cardinality is high.
     task:
         ``"auto"``, ``"classification"``, or ``"regression"``. ``"auto"``
         infers classification from a boolean, categorical, string, or
-        low-cardinality integer target.
+        low-cardinality integer target. It is ignored when targets are omitted
+        or the training target is entirely null.
     near_duplicate_decimals:
         Decimal places used to round numeric features before near-duplicate
         detection. ``None`` disables near-duplicate checks.
@@ -759,15 +827,24 @@ def audit_split(
 
     Notes
     -----
-    Exact duplicate, group, and temporal leakage are errors. Statistical and
-    heuristic checks (near-duplicates, constants, cardinality, missingness,
-    distribution shift, target leakage, and target shift) are warnings because
-    they can be legitimate dataset properties.
+    Schema problems (missing columns), empty splits, exact duplicate overlap,
+    group leakage, temporal leakage, and unparseable or numeric timestamps are
+    errors. Statistical and heuristic checks (near-duplicates, constants,
+    cardinality, missingness, distribution shift, target leakage, and target
+    shift) are warnings because they can be legitimate dataset properties.
 
     Duplicate checks exclude ``id_cols`` and ``time_col``. Near-duplicates are
-    approximated by hashing features rounded to ``near_duplicate_decimals``;
-    this is deterministic and dependency-light, not an exact nearest-neighbour
-    search.
+    approximated by hashing rows with numeric features rounded to
+    ``near_duplicate_decimals``; this is deterministic and dependency-light,
+    not an exact nearest-neighbour search.
+
+    Findings never include raw cell values. Messages carry column names, counts,
+    rates, and statistics only.
+
+    Numeric target-leakage correlation covers regression and binary
+    classification. Multiclass targets use normalized mutual information, which
+    only evaluates features with limited cardinality; a continuous feature that
+    perfectly encodes a multiclass target may not be flagged.
     """
     if not isinstance(X_train, pd.DataFrame) or not isinstance(X_test, pd.DataFrame):
         raise TypeError("X_train and X_test must be pandas DataFrames")
@@ -776,16 +853,20 @@ def audit_split(
 
     if task not in {"auto", "classification", "regression"}:
         raise ValueError("task must be 'auto', 'classification', or 'regression'")
-    if near_duplicate_decimals is not None and near_duplicate_decimals < 0:
-        raise ValueError("near_duplicate_decimals must be non-negative or None")
+    if near_duplicate_decimals is not None and (
+        isinstance(near_duplicate_decimals, bool)
+        or not isinstance(near_duplicate_decimals, int)
+        or near_duplicate_decimals < 0
+    ):
+        raise ValueError("near_duplicate_decimals must be a non-negative int or None")
     if not 0 < constant_threshold <= 1:
         raise ValueError("constant_threshold must be in (0, 1]")
     if not 0 < high_cardinality_threshold <= 1:
         raise ValueError("high_cardinality_threshold must be in (0, 1]")
     if high_cardinality_min_unique < 2:
         raise ValueError("high_cardinality_min_unique must be at least 2")
-    if not 0 <= missingness_shift_threshold <= 1:
-        raise ValueError("missingness_shift_threshold must be in [0, 1]")
+    if not 0 < missingness_shift_threshold <= 1:
+        raise ValueError("missingness_shift_threshold must be in (0, 1]")
     if distribution_shift_threshold <= 0:
         raise ValueError("distribution_shift_threshold must be positive")
     if not 0 < categorical_shift_threshold <= 1:
@@ -824,11 +905,14 @@ def audit_split(
         test_target = _require_length(
             _as_series(y_test, name="y_test"), len(X_test), name="y_test"
         )
-        resolved_task = _resolve_task(
-            task,
-            train_target,
-            classification_max_classes=classification_max_classes,
-        )
+        if train_target.dropna().empty:
+            resolved_task = None
+        else:
+            resolved_task = _resolve_task(
+                task,
+                train_target,
+                classification_max_classes=classification_max_classes,
+            )
 
     train_groups: pd.Series | None = None
     test_groups: pd.Series | None = None
@@ -882,12 +966,20 @@ def audit_split(
         _add_finding(
             findings,
             "empty_split",
+            severity="error",
             message=(
                 f"empty split: train has {len(X_train)} row(s), "
                 f"test has {len(X_test)} row(s)"
             ),
             train=len(X_train),
             test=len(X_test),
+        )
+    if train_target is not None and train_target.dropna().empty:
+        _add_finding(
+            findings,
+            "target_all_null",
+            message="training target has no non-null values",
+            train=int(train_target.isna().sum()),
         )
 
     for column in common:
@@ -914,13 +1006,13 @@ def audit_split(
         train_duplicates = X_train.loc[:, duplicate_columns]
         test_duplicates = X_test.loc[:, duplicate_columns]
         exact_overlap = _overlap_mask(
-            _hash_frame(train_duplicates), _hash_frame(test_duplicates)
+            _hash_frame(test_duplicates), _hash_frame(train_duplicates)
         )
         duplicate_overlap = int(exact_overlap.sum())
         if near_duplicate_decimals is not None:
             near_overlap = _overlap_mask(
-                _near_signature(train_duplicates, near_duplicate_decimals),
                 _near_signature(test_duplicates, near_duplicate_decimals),
+                _near_signature(train_duplicates, near_duplicate_decimals),
             )
             near_duplicate_overlap = int((near_overlap & ~exact_overlap).sum())
         if duplicate_overlap:
@@ -982,44 +1074,72 @@ def audit_split(
 
     time_overlap = 0
     if time_col is not None:
-        train_times = pd.to_datetime(X_train[time_col], errors="coerce", utc=True)
-        test_times = pd.to_datetime(X_test[time_col], errors="coerce", utc=True)
-        train_invalid = int(X_train[time_col].notna().sum() - train_times.notna().sum())
-        test_invalid = int(X_test[time_col].notna().sum() - test_times.notna().sum())
-        if train_invalid or test_invalid:
+        numeric_time = ptypes.is_numeric_dtype(
+            X_train[time_col]
+        ) or ptypes.is_numeric_dtype(X_test[time_col])
+        if numeric_time:
             _add_finding(
                 findings,
-                "time_parse_error",
+                "time_format_error",
                 column=time_col,
+                severity="error",
                 message=(
-                    f"could not parse timestamps: {train_invalid} in train, "
-                    f"{test_invalid} in test"
+                    "time_col is numeric; numeric timestamps are ambiguous "
+                    "(pandas interprets them as nanoseconds)"
                 ),
-                train=train_invalid,
-                test=test_invalid,
             )
-        train_valid_times = train_times.dropna()
-        test_valid_times = test_times.dropna()
-        if not train_valid_times.empty and not test_valid_times.empty:
-            train_max = train_valid_times.max()
-            test_min = test_valid_times.min()
-            if train_max > test_min:
-                time_overlap = int((train_valid_times > test_min).sum())
-                test_before = int((test_valid_times < train_max).sum())
+        else:
+            train_times = _parse_times(X_train[time_col])
+            test_times = _parse_times(X_test[time_col])
+            train_invalid = int(
+                X_train[time_col].notna().sum() - train_times.notna().sum()
+            )
+            test_invalid = int(
+                X_test[time_col].notna().sum() - test_times.notna().sum()
+            )
+            if train_invalid or test_invalid:
                 _add_finding(
                     findings,
-                    "temporal_leakage",
+                    "time_parse_error",
                     column=time_col,
                     severity="error",
                     message=(
-                        f"train extends past the earliest test timestamp "
-                        f"(train max {train_max.isoformat()}, "
-                        f"test min {test_min.isoformat()}): "
-                        f"{time_overlap} train row(s) after test start, "
-                        f"{test_before} test row(s) before train end"
+                        f"could not parse timestamps: {train_invalid} in train, "
+                        f"{test_invalid} in test"
                     ),
-                    train=time_overlap,
-                    test=test_before,
+                    train=train_invalid,
+                    test=test_invalid,
+                )
+            train_valid_times = train_times.dropna()
+            test_valid_times = test_times.dropna()
+            if not train_valid_times.empty and not test_valid_times.empty:
+                train_max = train_valid_times.max()
+                test_min = test_valid_times.min()
+                if train_max >= test_min:
+                    time_overlap = int((train_valid_times >= test_min).sum())
+                    test_before = int((test_valid_times <= train_max).sum())
+                    _add_finding(
+                        findings,
+                        "temporal_leakage",
+                        column=time_col,
+                        severity="error",
+                        message=(
+                            "train reaches or passes the earliest test timestamp: "
+                            f"{time_overlap} train row(s) at or after test start, "
+                            f"{test_before} test row(s) at or before train end"
+                        ),
+                        train=time_overlap,
+                        test=test_before,
+                    )
+            elif not train_invalid and not test_invalid:
+                _add_finding(
+                    findings,
+                    "time_nulls",
+                    column=time_col,
+                    message=(
+                        "no valid timestamps in train or test; "
+                        "temporal order was not checked"
+                    ),
                 )
 
     feature_columns = [
@@ -1081,7 +1201,7 @@ def audit_split(
         )
 
     return SplitAudit(
-        findings=pd.DataFrame(findings, columns=_AUDIT_COLUMNS),
+        findings=pd.DataFrame(findings, columns=_AUDIT_COLUMNS, dtype=object),
         train_rows=len(X_train),
         test_rows=len(X_test),
         task=resolved_task,

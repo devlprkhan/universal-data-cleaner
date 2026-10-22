@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from typing import Any
 
@@ -114,6 +115,37 @@ class DuplicateLeakageTests(unittest.TestCase):
             findings_for(report, "duplicate_rows").iloc[0]["severity"], "error"
         )
 
+    def test_duplicate_counts_measure_test_rows(self) -> None:
+        train = pd.DataFrame({"x": [1, 1, 1, 2]})
+        test = pd.DataFrame({"x": [1, 1, 3]})
+        report = audit_split(train, test)
+
+        self.assertEqual(report.duplicate_overlap_rows, 2)
+        self.assertIn("2 test row(s)", report.summary())
+
+    def test_exact_duplicates_are_dtype_independent(self) -> None:
+        train = pd.DataFrame({"x": [1, 2, 3]})
+        test = pd.DataFrame({"x": [1.0, 4.0, 5.0]})
+        report = audit_split(train, test)
+
+        self.assertEqual(report.duplicate_overlap_rows, 1)
+        self.assertIn("dtype_change", checks(report))
+
+    def test_object_numbers_and_strings_are_distinct(self) -> None:
+        train = pd.DataFrame({"x": pd.Series([1, 2, 3], dtype=object)})
+        test = pd.DataFrame({"x": pd.Series(["1", "4", "5"], dtype=object)})
+        report = audit_split(train, test)
+
+        self.assertEqual(report.duplicate_overlap_rows, 0)
+
+    def test_exact_and_near_duplicate_are_not_double_counted(self) -> None:
+        train = pd.DataFrame({"x": [1.0, 2.0, 3.0]})
+        test = pd.DataFrame({"x": [1.0, 1.04, 30.0]})
+        report = audit_split(train, test, near_duplicate_decimals=1)
+
+        self.assertEqual(report.duplicate_overlap_rows, 1)
+        self.assertEqual(report.near_duplicate_overlap_rows, 1)
+
     def test_near_duplicate_uses_rounding(self) -> None:
         train = pd.DataFrame({"x": [1.0, 2.0, 3.0]})
         test = pd.DataFrame({"x": [1.04, 20.0, 30.0]})
@@ -140,6 +172,33 @@ class DuplicateLeakageTests(unittest.TestCase):
         report = audit_split(train, test)
         self.assertEqual(report.duplicate_overlap_rows, 0)
 
+    def test_near_duplicate_zero_decimals(self) -> None:
+        train = pd.DataFrame({"x": [0.4, 10.0]})
+        test = pd.DataFrame({"x": [0.49, 20.0]})
+        report = audit_split(train, test, near_duplicate_decimals=0)
+
+        self.assertEqual(report.near_duplicate_overlap_rows, 1)
+
+    def test_time_column_is_excluded_from_duplicate_checks(self) -> None:
+        train = pd.DataFrame(
+            {
+                "event_time": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+                "x": [1, 2],
+            }
+        )
+        test = pd.DataFrame(
+            {
+                "event_time": pd.to_datetime(["2024-01-03", "2024-01-04"]),
+                "x": [1, 2],
+            }
+        )
+
+        report = audit_split(train, test, time_col="event_time")
+        self.assertEqual(report.duplicate_overlap_rows, 2)
+
+        report = audit_split(train, test)
+        self.assertEqual(report.duplicate_overlap_rows, 0)
+
 
 class GroupLeakageTests(unittest.TestCase):
     def test_combined_group_labels_are_split(self) -> None:
@@ -153,6 +212,13 @@ class GroupLeakageTests(unittest.TestCase):
         self.assertEqual(
             findings_for(report, "group_leakage").iloc[0]["severity"], "error"
         )
+
+    def test_groups_accept_a_series(self) -> None:
+        train = pd.DataFrame({"x": [1, 2, 3]})
+        test = pd.DataFrame({"x": [4, 5]})
+        report = audit_split(train, test, groups=pd.Series([10, 20, 30, 30, 40]))
+
+        self.assertEqual(report.group_overlap, 1)
 
     def test_separate_group_labels_and_no_leakage(self) -> None:
         train = pd.DataFrame({"x": [1, 2, 3]})
@@ -195,9 +261,9 @@ class TemporalLeakageTests(unittest.TestCase):
         report = audit_split(train, test, time_col="event_time")
 
         self.assertFalse(report.valid)
-        self.assertEqual(report.time_overlap_rows, 1)
+        self.assertEqual(report.time_overlap_rows, 2)
         self.assertIn("temporal_leakage", checks(report))
-        self.assertIn("train max", report.summary())
+        self.assertIn("train reaches", report.summary())
 
     def test_temporal_split_without_overlap(self) -> None:
         train = pd.DataFrame(
@@ -220,13 +286,44 @@ class TemporalLeakageTests(unittest.TestCase):
         self.assertEqual(report.time_overlap_rows, 0)
         self.assertNotIn("temporal_leakage", checks(report))
 
-    def test_unparseable_timestamps_are_warnings(self) -> None:
+    def test_unparseable_timestamps_are_errors(self) -> None:
         train = pd.DataFrame({"event_time": ["not-a-date"], "x": [1]})
         test = pd.DataFrame({"event_time": ["2024-01-01"], "x": [2]})
         report = audit_split(train, test, time_col="event_time")
 
         self.assertIn("time_parse_error", checks(report))
+        self.assertFalse(report.valid)
+
+    def test_mixed_text_timestamp_formats_are_parsed(self) -> None:
+        train = pd.DataFrame(
+            {"event_time": ["2024-01-01", "01/02/2024", "2024-01-03"], "x": [1, 2, 3]}
+        )
+        test = pd.DataFrame({"event_time": ["2024-01-04"], "x": [4]})
+        report = audit_split(train, test, time_col="event_time")
+
+        self.assertNotIn("time_parse_error", checks(report))
+        self.assertNotIn("temporal_leakage", checks(report))
         self.assertTrue(report.valid)
+
+    def test_numeric_time_columns_are_rejected(self) -> None:
+        train = pd.DataFrame({"event_time": [1, 2, 3], "x": [1, 2, 3]})
+        test = pd.DataFrame({"event_time": [4, 5], "x": [4, 5]})
+        report = audit_split(train, test, time_col="event_time")
+
+        self.assertIn("time_format_error", checks(report))
+        self.assertFalse(report.valid)
+
+    def test_timestamp_boundary_overlap_is_detected(self) -> None:
+        train = pd.DataFrame(
+            {"event_time": pd.to_datetime(["2024-01-01", "2024-01-02"]), "x": [1, 2]}
+        )
+        test = pd.DataFrame(
+            {"event_time": pd.to_datetime(["2024-01-02", "2024-01-03"]), "x": [3, 4]}
+        )
+        report = audit_split(train, test, time_col="event_time")
+
+        self.assertIn("temporal_leakage", checks(report))
+        self.assertEqual(report.time_overlap_rows, 1)
 
 
 class ColumnQualityTests(unittest.TestCase):
@@ -277,15 +374,46 @@ class ColumnQualityTests(unittest.TestCase):
         report = audit_split(train, test, id_cols=["numeric_id"])
 
         flagged = set(findings_for(report, "high_cardinality")["column"])
-        self.assertEqual(flagged, {"user", "numeric_id"})
-        messages = " ".join(findings_for(report, "high_cardinality")["message"])
-        self.assertIn("declared identifier", messages)
+        identifier = set(findings_for(report, "high_cardinality_identifier")["column"])
+        self.assertEqual(flagged, {"user"})
+        self.assertEqual(identifier, {"numeric_id"})
+        self.assertIn(
+            "declared identifier",
+            findings_for(report, "high_cardinality_identifier").iloc[0]["message"],
+        )
 
     def test_unique_numeric_features_are_not_high_cardinality(self) -> None:
         train, test, _, _ = clean_split()
         report = audit_split(train, test)
 
         self.assertNotIn("high_cardinality", checks(report))
+
+    def test_all_null_column_does_not_crash(self) -> None:
+        train = pd.DataFrame(
+            {"row": [1, 2, 3], "x": [1, 2, 3], "empty": [None, None, None]}
+        )
+        test = pd.DataFrame(
+            {"row": [4, 5, 6], "x": [4, 5, 6], "empty": [None, None, None]}
+        )
+        report = audit_split(train, test, id_cols=["row"])
+
+        self.assertNotIn("constant_column", checks(report))
+        self.assertTrue(report.valid)
+
+    def test_id_columns_are_excluded_from_other_checks(self) -> None:
+        n = 30
+        train = pd.DataFrame({"id": np.arange(n), "x": np.arange(n) % 5})
+        test = pd.DataFrame({"id": np.arange(n) + 100, "x": np.arange(n) % 5})
+        y_train = pd.Series(np.arange(n))
+        y_test = pd.Series(np.arange(n))
+
+        report = audit_split(train, test, y_train, y_test, id_cols=["id"])
+
+        other = report.findings[
+            report.findings["check"] != "high_cardinality_identifier"
+        ]
+        self.assertNotIn("id", set(other["column"].dropna()))
+        self.assertIn("high_cardinality_identifier", checks(report))
 
 
 class ShiftTests(unittest.TestCase):
@@ -380,6 +508,46 @@ class TargetLeakageTests(unittest.TestCase):
 
         self.assertNotIn("target_leakage", checks(report))
 
+    def test_non_default_indexes_do_not_disable_detection(self) -> None:
+        n = 30
+        order = np.random.default_rng(0).permutation(n)
+        train = pd.DataFrame({"row": np.arange(n), "x": np.arange(n)}, index=order)
+        test = pd.DataFrame({"row": np.arange(n, 2 * n), "x": np.arange(n) + 100})
+        y_train = pd.Series(np.arange(n), index=order)
+        y_test = pd.Series(np.arange(n), index=np.arange(n) + 500)
+
+        report = audit_split(train, test, y_train, y_test, id_cols=["row"])
+
+        self.assertIn("x", set(findings_for(report, "target_leakage")["column"]))
+
+    def test_findings_do_not_include_raw_values(self) -> None:
+        secret_value = "secret@example.com"
+        n = 30
+        train = pd.DataFrame(
+            {
+                "row": np.arange(n),
+                "contact": [secret_value] * n,
+                "x": np.arange(n),
+            }
+        )
+        test = pd.DataFrame(
+            {
+                "row": np.arange(n, 2 * n),
+                "contact": [secret_value] * n,
+                "x": np.arange(n) + 100,
+            }
+        )
+        y_train = pd.Series(["a"] * 15 + ["b"] * 15)
+        y_test = pd.Series(["a"] * 15 + [secret_value] * 15)
+
+        report = audit_split(train, test, y_train, y_test, id_cols=["row"])
+        serialized = json.dumps(report.to_dict())
+        rendered = report.summary() + report.to_markdown()
+
+        self.assertIn("constant_column", checks(report))
+        self.assertNotIn(secret_value, serialized)
+        self.assertNotIn(secret_value, rendered)
+
 
 class TargetShiftTests(unittest.TestCase):
     def test_class_shift_and_unseen_classes(self) -> None:
@@ -395,7 +563,8 @@ class TargetShiftTests(unittest.TestCase):
         self.assertIn("target_shift", checks(report))
         self.assertIn("unseen_target_class", checks(report))
         self.assertIn(
-            "c", findings_for(report, "unseen_target_class").iloc[0]["message"]
+            "1 class(es) unseen",
+            findings_for(report, "unseen_target_class").iloc[0]["message"],
         )
 
     def test_regression_target_shift(self) -> None:
@@ -425,14 +594,25 @@ class SchemaAndEmptySplitTests(unittest.TestCase):
         self.assertIn("dtype_change", checks(report))
         self.assertEqual(findings_for(report, "missing_column").iloc[0]["column"], "b")
 
-    def test_empty_split_is_a_warning(self) -> None:
+    def test_empty_splits_are_errors(self) -> None:
         train = pd.DataFrame({"x": pd.Series(dtype="float64")})
         test = pd.DataFrame({"x": [1.0, 2.0]})
         report = audit_split(train, test)
 
-        self.assertTrue(report.valid)
+        self.assertFalse(report.valid)
         self.assertIn("empty_split", checks(report))
         self.assertEqual(report.train_rows, 0)
+
+        report = audit_split(test, train)
+        self.assertFalse(report.valid)
+        self.assertIn("empty_split", checks(report))
+
+    def test_integer_column_labels_are_reported(self) -> None:
+        train = pd.DataFrame({1: [1, 2, 3], 2: [4, 5, 6]})
+        test = pd.DataFrame({1: [1, 2, 3]})
+        report = audit_split(train, test)
+
+        self.assertIn("(2)", report.summary())
 
 
 class TaskInferenceTests(unittest.TestCase):
@@ -462,6 +642,17 @@ class TaskInferenceTests(unittest.TestCase):
         )
         report = audit_split(self.train, self.test)
         self.assertIsNone(report.task)
+
+    def test_all_null_target_has_no_task(self) -> None:
+        report = audit_split(
+            self.train,
+            self.test,
+            [None] * 30,
+            [None] * 30,
+        )
+
+        self.assertIsNone(report.task)
+        self.assertIn("target_all_null", checks(report))
 
 
 class ArgumentValidationTests(unittest.TestCase):
@@ -529,10 +720,13 @@ class ArgumentValidationTests(unittest.TestCase):
         invalid: list[dict[str, object]] = [
             {"task": "sideways"},
             {"near_duplicate_decimals": -1},
+            {"near_duplicate_decimals": 1.5},
+            {"near_duplicate_decimals": True},
             {"constant_threshold": 0},
             {"constant_threshold": 1.5},
             {"high_cardinality_threshold": 0},
             {"high_cardinality_min_unique": 1},
+            {"missingness_shift_threshold": 0},
             {"missingness_shift_threshold": -0.1},
             {"missingness_shift_threshold": 1.1},
             {"distribution_shift_threshold": 0},

@@ -338,16 +338,22 @@ audit.to_markdown()
 audit.raise_if_invalid()
 ```
 
-Exact duplicate overlap, group leakage, and temporal leakage are errors.
-Near-duplicates, constant / near-constant columns, high-cardinality identifiers,
-missingness and distribution shift, target-leakage heuristics, and target shift
-are warnings because they can be legitimate properties of a dataset. The audit
-only reports; it never repairs or reorders a split.
+Schema problems such as missing columns, empty splits, exact duplicate overlap,
+group leakage, temporal leakage, and unparseable or numeric timestamps are
+errors. Near-duplicates, constant / near-constant columns, high-cardinality
+identifiers, missingness and distribution shift, target-leakage heuristics, and
+target shift are warnings because they can be legitimate properties of a
+dataset. The audit only reports; it never repairs or reorders a split.
 
 `groups` may hold labels for both splits (`len(X_train) + len(X_test)`); pass
 `groups_test` when it only covers the training rows. Duplicate checks exclude
-`id_cols` and `time_col`. Near-duplicates are approximated deterministically by
-hashing numeric features rounded to `near_duplicate_decimals` (default `3`).
+`id_cols` and `time_col`; declared identifiers are still reported under
+`high_cardinality_identifier` when their cardinality is high. Near-duplicates
+are approximated deterministically by hashing rows with numeric features
+rounded to `near_duplicate_decimals` (default `3`).
+
+Findings never include raw cell values. Messages carry column names, counts,
+rates, and statistics only, so reports can be logged safely.
 
 ## Audit trail, manifests, and fingerprints
 

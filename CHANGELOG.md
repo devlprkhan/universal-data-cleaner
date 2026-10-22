@@ -15,10 +15,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
   columns, high-cardinality identifiers, missingness shift, numeric and
   categorical distribution shift, unseen target classes, and target shift.
 - Findings carry a `check`, `column`, `severity`, `message`, and train/test
-  values. Exact duplicates, group leakage, and temporal leakage are errors;
-  statistical and heuristic checks are warnings.
+  values. Schema problems, empty splits, exact duplicates, group leakage,
+  temporal leakage, and unparseable or numeric timestamps are errors;
+  statistical and heuristic checks are warnings. High-cardinality declared
+  identifiers are reported separately as `high_cardinality_identifier`.
 - `SplitAudit` exposes `findings`, `valid`, `errors`, `warnings`, `summary()`,
   `to_markdown()`, `to_dict()`, and `raise_if_invalid()`.
+- Findings never include raw cell values; messages contain column names,
+  counts, rates, and statistics only.
 
 ### Changed
 
@@ -30,7 +34,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   split. Duplicate checks exclude declared `id_cols` and `time_col`.
 - Near-duplicates use a deterministic rounded-feature hash rather than a
   nearest-neighbour search, so the result is reproducible without extra
-  dependencies.
+  dependencies. Exact duplicate hashing is dtype-independent, so `1` and
+  `1.0` compare equal while object numbers and strings stay distinct.
 - `groups` may cover both splits or training rows only when `groups_test` is
   supplied.
 
