@@ -7,11 +7,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-10-22
+
 ### Documentation
 
 - Make the documentation site the single source of truth. The README is now a
   concise entry point with install, quick start, and a guide index.
 - Add artifacts/reproducibility and production guides to the docs site.
+
+### Notes
+
+- Documentation-only release; no runtime behavior changes and the artifact
+  format remains `2`.
 
 ## [2.5.1] - 2026-10-22
 
