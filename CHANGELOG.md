@@ -7,12 +7,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-10-22
+
 ### Documentation
 
 - Add a MkDocs Material documentation site with task guides, an API reference,
   and GitHub Pages deployment.
 - Expose the documentation site in the package project URLs and README so PyPI
   and GitHub point to the same central reference.
+
+### Notes
+
+- Documentation-only release; no runtime behavior changes and the artifact
+  format remains `2`.
 
 ## [2.5.0] - 2026-10-22
 
