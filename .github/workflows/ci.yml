@@ -103,10 +103,29 @@ jobs:
           name: dist
           path: dist/
 
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install documentation dependencies
+        run: uv sync --group docs
+
+      - name: Build documentation
+        run: uv run --group docs mkdocs build --strict
+
   ci-success:
     name: ci-success
     if: always()
-    needs: [lint, typecheck, test, build]
+    needs: [lint, typecheck, test, build, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Fail when any required job failed
@@ -114,5 +133,6 @@ jobs:
           needs.lint.result != 'success' ||
           needs.typecheck.result != 'success' ||
           needs.test.result != 'success' ||
-          needs.build.result != 'success'
+          needs.build.result != 'success' ||
+          needs.docs.result != 'success'
         run: exit 1
