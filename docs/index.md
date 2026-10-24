@@ -7,51 +7,60 @@ hide:
 <div class="hero" markdown>
 <div class="hero__copy" markdown>
 
-# Clean data.<br>Keep the leak out.
+# Same cleaning rules.<br>Every batch.
 
-Universal Data Cleaner is a scikit-learn-compatible transformer that learns
-cleaning rules from training data only, then applies those exact rules to every
-test and production batch.
+A scikit-learn transformer for pandas. It fits imputation, outlier, category,
+and schema rules on X_train, then reuses them unchanged for validation, test,
+and production.
 
-<div class="hero__actions" markdown>
-[Start the quickstart](quickstart.md){ .md-button .md-button--primary }
-[Read the leak-safe workflow](leak-safe-workflow.md){ .md-button }
+No test-set peeking, no re-learning, and no silent schema drift. Every learned
+or configured decision stays inspectable.
+
+<div class="hero__install" data-copy-text="pip install universal-data-cleaner">
+<code>pip install universal-data-cleaner</code>
+<button class="hero__install-copy" type="button" aria-label="Copy install command">Copy</button>
 </div>
 
-<p class="hero__meta"><span>v2.5.2 on <a href="https://pypi.org/project/universal-data-cleaner/">PyPI</a></span><span>Python 3.10+</span><span>pandas 2.2+</span><span>MIT</span></p>
+<div class="hero__actions">
+<a class="md-button md-button--primary" href="quickstart/">Start the quickstart <span aria-hidden="true">→</span></a>
+</div>
+
+<div class="hero__secondary">
+<a href="leak-safe-workflow/">See the leak-safe workflow</a>
+</div>
 
 </div>
-<div class="hero__ledger" markdown>
-<div class="ledger">
-  <div class="ledger__header">
-    <span>Fitted cleaner</span>
-    <span class="ledger__status">same rules everywhere</span>
-  </div>
-  <div class="ledger__row">
-    <span class="ledger__step">1</span>
-    <div>
-      <span class="ledger__label">Fit on training data</span>
-      <code class="ledger__code">cleaner.fit(X_train)</code>
-      <span class="ledger__note">Medians, modes, bounds, categories, and schema are learned here.</span>
-    </div>
-  </div>
-  <div class="ledger__row">
-    <span class="ledger__step">2</span>
-    <div>
-      <span class="ledger__label">Keep the learned rules</span>
-      <code class="ledger__code">cleaner.decision_log()</code>
-      <span class="ledger__note">Every learned or configured decision stays inspectable.</span>
-    </div>
-  </div>
-  <div class="ledger__row">
-    <span class="ledger__step">3</span>
-    <div>
-      <span class="ledger__label">Transform every batch</span>
-      <code class="ledger__code">cleaner.transform(X_batch)</code>
-      <span class="ledger__note">No re-learning. No test-set peeking. No silent schema changes.</span>
-    </div>
-  </div>
-</div>
+<div class="hero__code" markdown>
+=== "fit.py"
+
+    ```python
+    from data_cleaner import DataCleaner
+
+    cleaner = DataCleaner()
+    cleaner.fit(X_train)
+
+    # Fitted on X_train only:
+    # medians, categories, bounds, schema
+    train_clean = cleaner.transform(X_train)
+    test_clean = cleaner.transform(X_test)
+
+    # Reuse the fitted rules in production.
+    prod_clean = cleaner.transform(X_prod)
+
+    cleaner.decision_log()
+    ```
+
+=== "transform.py"
+
+    ```python
+    # Reuse the cleaner fitted on train.
+    # transform() never learns from data.
+    test_clean = cleaner.transform(X_test)
+    prod_clean = cleaner.transform(X_prod)
+
+    # Review every learned decision.
+    cleaner.decision_log()
+    ```
 </div>
 </div>
 

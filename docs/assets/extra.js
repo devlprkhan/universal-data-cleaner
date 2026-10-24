@@ -102,6 +102,50 @@
       }, 1800);
     });
 
+    const copyText = async (text) => {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    };
+
+    document.addEventListener("click", async (event) => {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest(".hero__install-copy");
+      const install = button?.closest(".hero__install");
+      const text = install?.getAttribute("data-copy-text");
+      if (!button || !text) return;
+
+      try {
+        await copyText(text);
+      } catch {
+        return;
+      }
+
+      button.classList.add("is-copied");
+      button.textContent = "Copied";
+      button.setAttribute("aria-label", "Install command copied");
+      liveRegion.textContent = "Install command copied to clipboard";
+
+      window.clearTimeout(button.copyTimer);
+      button.copyTimer = window.setTimeout(() => {
+        button.classList.remove("is-copied");
+        button.textContent = "Copy";
+        button.setAttribute("aria-label", "Copy install command");
+        liveRegion.textContent = "";
+      }, 1800);
+    });
+
     const observer = new MutationObserver(() => {
       labelCopyButtons();
       labelIconLinks();
