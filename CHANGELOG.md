@@ -7,6 +7,41 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-03
+
+### Added
+
+- `read_csv_safe()`: string-first CSV ingestion with contract-driven coercion and
+  an `IngestionReport` covering per-column detection, output dtypes, missing
+  counts, and every normalization performed.
+- Identifier protection: ID columns and values with leading zeros stay text, and
+  the report records `leading_zeros_preserved`.
+- Spreadsheet artifact handling for numeric fields: thousands separators,
+  currency symbols, percent signs, accounting parentheses, and decimal commas
+  are normalized with one finding per transformation.
+- Date guards for compact `YYYYMMDD` values and Excel serial dates when the
+  contract declares `role="datetime"`, plus explicit `date_format` support and an
+  `ambiguous_date_format` warning for day/month ambiguity.
+- Boolean normalization for Y/N-style tokens with `boolean_tokens` findings.
+- `IngestionError` and the `on_error="warn" | "raise" | "ignore"` policy. Error
+  findings make the report fail without hiding the frame when policy is `"warn"`.
+- `mixed_types` and `empty_column` findings; mixed columns stay text instead of
+  silently losing values.
+- Docs: safe ingestion guide and an Upcoming page for release planning.
+
+### Changed
+
+- None. Tier 5 is additive and the artifact format remains `2`.
+
+### Notes
+
+- The ingestion report contains column names, counts, and messages only; it never
+  includes raw cell values, so it is safe to log or attach to an artifact.
+- Without a contract, `YYYYMMDD` and Excel serial values remain numeric. Declare
+  a datetime role when they are dates.
+- CSV is the supported input for this release; the report model is designed to
+  extend to other tabular readers later.
+
 ## [2.5.2] - 2026-10-22
 
 ### Documentation

@@ -108,6 +108,7 @@ nav:
   - Guides:
       - Cleaning data: cleaning.md
       - Contracts & drift: contracts.md
+      - Safe ingestion: ingestion.md
       - Validation, joins & dedup: validation-joins.md
       - ML split audit: ml-split-audit.md
       - Production guide: production.md
@@ -115,5 +116,6 @@ nav:
       - API reference: api.md
       - Artifacts & reproducibility: artifacts.md
       - Changelog: changelog.md
+      - Upcoming: upcoming.md
   - PyPI: https://pypi.org/project/universal-data-cleaner/
   - GitHub: https://github.com/devlprkhan/universal-data-cleaner
