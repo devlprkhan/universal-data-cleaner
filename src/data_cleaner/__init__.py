@@ -22,6 +22,7 @@ from .cleaner import DataCleaner
 from .config import CleanerConfig
 from .contract import ColumnSpec, Contract, DataContract, DriftReport
 from .decisions import CleaningDecision
+from .ingestion import IngestionError, IngestionReport, read_csv_safe
 from .integration import (
     DeduplicationReport,
     JoinDiagnosis,
@@ -61,6 +62,8 @@ __all__ = [
     "DeduplicationReport",
     "DriftReport",
     "Expectation",
+    "IngestionError",
+    "IngestionReport",
     "JoinDiagnosis",
     "ReferentialIntegrityReport",
     "SplitAudit",
@@ -83,6 +86,7 @@ __all__ = [
     "matches_pattern",
     "not_null",
     "profile_dataframe",
+    "read_csv_safe",
     "row_count_between",
     "unique",
     "validate",

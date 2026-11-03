@@ -70,6 +70,28 @@ config = CleanerConfig(
 | `drop_constant_columns` | Keep `True` unless a downstream component requires the column |
 | `cap_outliers` | Keep `True` for learned IQR clipping; set `False` when extremes are meaningful |
 
+## Ingest with an audit trail
+
+Read CSV input through the contract instead of letting pandas infer types
+independently on every run:
+
+```python
+from data_cleaner import read_csv_safe
+
+X_batch, ingestion = read_csv_safe(
+    "incoming.csv",
+    contract=contract,
+    on_error="raise",
+)
+
+if not ingestion.success:
+    raise RuntimeError(ingestion.summary())
+```
+
+`on_error="raise"` fails before the model sees an unparseable ID, date, or
+boolean. The report records normalization counts without logging raw cell values.
+See [Safe ingestion](ingestion.md) for the policy and guardrails.
+
 ## Never fit on the wrong data
 
 The most important production rule is also the simplest:
@@ -156,7 +178,8 @@ values. Run it in tests and in a pre-model validation step.
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | Required column missing | Upstream schema changed | Contract + `on_drift="raise"` |
-| IDs gained `.0` or lost zeros | ID was treated as numeric | `ColumnSpec(..., role="id")` |
+| IDs gained `.0` or lost zeros | ID was treated as numeric | `ColumnSpec(..., role="id")` and `read_csv_safe()` |
+| Currency or percent strings stayed text | Spreadsheet formatting leaked into the file | `read_csv_safe()` and a numeric `ColumnSpec` |
 | Category exploded into rare labels | Unseen values kept | `unseen_category="fill"` or encoder `handle_unknown` |
 | Scores dropped after deploy | Different imputation or bounds | Reuse the saved fitted cleaner |
 | Dates disappeared | Datetime column not declared | Add it to `datetime_columns` |
@@ -168,6 +191,7 @@ values. Run it in tests and in a pre-model validation step.
 - [Leak-safe workflow](leak-safe-workflow.md)
 - [Cleaning data](cleaning.md)
 - [Contracts & drift](contracts.md)
+- [Safe ingestion](ingestion.md)
 - [Validation, joins & dedup](validation-joins.md)
 - [ML split audit](ml-split-audit.md)
 - [Artifacts & reproducibility](artifacts.md)

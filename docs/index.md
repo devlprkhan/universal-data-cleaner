@@ -149,6 +149,7 @@ else.** Do not create a second cleaner for test or production data.
 | Area | Included |
 | --- | --- |
 | Cleaning | Numeric coercion, median / mean / constant imputation, IQR capping, categorical mode / constant imputation, boolean coercion, datetime parsing and calendar features, missing indicators, constant-column dropping |
+| Ingestion | Safe CSV reads with contract-driven coercion, identifier protection, date/boolean guards, and an ingestion report |
 | Safety | Declarative and inferred contracts, drift reports, expectations, join diagnostics, referential integrity, business-key dedup, and train/test split audits |
 | Operations | Decision logs, manifests, stable fingerprints, joblib save / load, and scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility |
 
@@ -195,6 +196,7 @@ the contract and manifest next to the model.
 
 - [Cleaning data](cleaning.md): every configuration option.
 - [Contracts & drift](contracts.md): make schema assumptions explicit.
+- [Safe ingestion](ingestion.md): read CSV with an audit trail.
 - [Validation, joins & dedup](validation-joins.md): check batches and keys.
 - [ML split audit](ml-split-audit.md): find contaminated splits.
 - [Production guide](production.md): deploy the same rules safely.
@@ -205,6 +207,7 @@ the contract and manifest next to the model.
 - [API reference](api.md): generated from the package docstrings.
 - [Artifacts & reproducibility](artifacts.md): logs, manifests, fingerprints.
 - [Changelog](changelog.md): release notes and behavior changes.
+- [Upcoming](upcoming.md): what ships next and what is out of scope.
 </div>
 </div>
 

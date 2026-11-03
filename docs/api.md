@@ -19,6 +19,7 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`DataCleaner`](#data_cleaner.DataCleaner) | Fit cleaning rules on training data and transform later batches |
 | [`CleanerConfig`](#data_cleaner.CleanerConfig) | Configure imputation, outliers, datetime features, contracts, and drift policy |
 | [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
+| [`read_csv_safe`](#data_cleaner.read_csv_safe) | Read CSV as text, coerce under a contract, and audit the conversion |
 | [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
 | [`audit_split`](#data_cleaner.audit_split) | Check a train/test split for leakage before training |
 
@@ -43,6 +44,14 @@ incrementally.
 ::: data_cleaner.DriftReport
 
 `Contract` is a shorthand alias for `DataContract`.
+
+## Safe ingestion
+
+::: data_cleaner.IngestionReport
+
+::: data_cleaner.IngestionError
+
+::: data_cleaner.read_csv_safe
 
 ## Expectations and validation
 

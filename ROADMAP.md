@@ -253,7 +253,8 @@ to the existing transformer, so it should not gate the core value.
 
 **Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
 integration modules added in `v2.4.0`; the ML split audit was added in
-`v2.5.0`.** The single `data_cleaner.py` module was
+`v2.5.0`; safe CSV ingestion was added in `v2.6.0`.** The single
+`data_cleaner.py` module was
 split into a typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker,
 while keeping the public import path and the pickled-artifact qualified name
 stable.
@@ -268,13 +269,15 @@ src/data_cleaner/
 ├── config.py          # CleanerConfig
 ├── cleaner.py         # DataCleaner
 ├── decisions.py       # CleaningDecision, decision log
+├── ingestion.py       # read_csv_safe, IngestionReport
 ├── integration.py     # join diagnostics, referential integrity, dedup
 ├── ml_audit.py        # audit_split, SplitAudit
 ├── profiling.py       # profile_dataframe, dataset_summary, helpers
 └── validation.py      # expectations, ValidationReport
 ```
 
-Future tiers add modules alongside these: `ingestion.py`.
+Future tiers add modules alongside these; Tier 6 is reporting and developer
+experience rather than a new data primitive.
 
 Compatibility rules:
 
@@ -340,11 +343,14 @@ GitHub release, let `publish.yml` handle PyPI.
 Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), Tier 2
 (`v2.3.0`: decision log, manifest, fingerprints), Tier 3 (`v2.4.0`:
 expectations, contract validation, join diagnostics, referential integrity, and
-audited deduplication), and Tier 4 (`v2.5.0`: `audit_split()` with duplicate and
+audited deduplication), Tier 4 (`v2.5.0`: `audit_split()` with duplicate and
 near-duplicate overlap, group leakage, temporal leakage, target-leakage
 heuristics, constant/high-cardinality columns, distribution shift, target shift,
-and severity-tagged findings) are shipped.
+and severity-tagged findings), and Tier 5 (`v2.6.0`: `read_csv_safe()` with
+contract-driven coercion, identifier/date/boolean guards, and an
+`IngestionReport`) are shipped.
 
-Implement **Tier 5 (`v2.6.0`)**: safe ingestion — `read_csv_safe()` that reads
-as strings first, coerces under contract control, and emits an ingestion report
-instead of silently inferring types.
+Implement **Tier 6 (`v2.7.0`)**: reporting and developer experience —
+`CleanerReport` combining profile, contract, decisions, validation, and drift,
+plus a `python -m data_cleaner audit` command. Excel ingestion is a follow-up in
+the ingestion track after the unified report.
