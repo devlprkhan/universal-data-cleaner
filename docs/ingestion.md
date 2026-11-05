@@ -150,6 +150,7 @@ warning, not a data loss: the original strings remain available for review.
 ## Related guides
 
 - [Contracts & drift](contracts.md): roles, allowed values, ranges, and formats.
+- [Batch reporting](reporting.md): combine ingestion, contracts, and decisions.
 - [Quickstart](quickstart.md): fit a cleaner on the ingested frame.
 - [Production guide](production.md): error policies and deployment checks.
 - [API reference](api.md#safe-ingestion): generated signatures and docstrings.

@@ -12,7 +12,7 @@ batch.
 3. Fit the cleaner on `X_train` only.
 4. Save the cleaner, contract, and manifest together.
 5. Load the same artifact for test and production batches.
-6. Transform, validate, and monitor drift.
+6. Audit, transform, validate, and monitor drift on every batch.
 
 ```python
 from data_cleaner import audit_split
@@ -139,6 +139,40 @@ With `on_drift="raise"`, error-severity findings stop the batch before the model
 sees malformed data. With `on_drift="warn"`, the report is logged and cleaning
 continues.
 
+## Audit the whole batch
+
+Drift is only one signal. `CleanerReport` combines the profile, contract, validation,
+ingestion, and the fitted cleaner's decisions into one review object:
+
+```python
+from data_cleaner import CleanerReport
+
+report = CleanerReport.from_cleaner(
+    cleaner,
+    X_batch,
+    source="production",
+    ingestion=ingestion,
+)
+report.raise_if_failed("Batch rejected")
+
+if report.has_warnings:
+    logger.warning(report.summary())
+```
+
+In a deploy or scheduled job, run the CLI and let the exit code gate the batch:
+
+```bash
+python -m data_cleaner audit incoming.csv \
+  --cleaner artifacts/data_cleaner.joblib \
+  --format json \
+  --output artifacts/audit.json \
+  --fail-on-warning
+```
+
+`0` means the batch passed, `1` means error findings (or warnings with
+`--fail-on-warning`), and `2` means the input or artifact could not be read. See
+[Batch reporting](reporting.md) for all options.
+
 ## Keep the artifact bundle together
 
 ```text
@@ -192,6 +226,7 @@ values. Run it in tests and in a pre-model validation step.
 - [Cleaning data](cleaning.md)
 - [Contracts & drift](contracts.md)
 - [Safe ingestion](ingestion.md)
+- [Batch reporting](reporting.md)
 - [Validation, joins & dedup](validation-joins.md)
 - [ML split audit](ml-split-audit.md)
 - [Artifacts & reproducibility](artifacts.md)
