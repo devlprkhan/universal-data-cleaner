@@ -38,6 +38,7 @@ from .profiling import (
     drop_duplicate_rows,
     profile_dataframe,
 )
+from .reporting import CleanerReport
 from .validation import (
     Expectation,
     ValidationReport,
@@ -54,6 +55,7 @@ from .validation import (
 
 __all__ = [
     "CleanerConfig",
+    "CleanerReport",
     "CleaningDecision",
     "ColumnSpec",
     "Contract",

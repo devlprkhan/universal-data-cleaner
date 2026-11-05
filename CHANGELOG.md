@@ -7,6 +7,41 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-05
+
+### Added
+
+- `CleanerReport`: one review object per batch combining the dataset profile,
+  contract drift, validation results, ingestion findings, and the fitted
+  cleaner's decision log.
+- `CleanerReport.from_frame()`, `from_csv()`, and `from_cleaner()` entry points.
+  None of them transform the input frame or re-fit the cleaner.
+- A tidy `findings` table with `source`, `column`, `check`, `severity`, `message`,
+  and `count`, plus `errors`, `warnings`, `success`, `summary()`,
+  `to_markdown()`, `to_dict()`, `to_json()`, and `raise_if_failed()`.
+- Profile warnings for empty datasets, empty columns, constant columns, high
+  missingness (configurable via `high_missing_threshold`), and duplicate rows.
+- `python -m data_cleaner audit data.csv` and the `data-cleaner` console script,
+  with `--contract`, `--cleaner`, `--name`, `--format markdown|json`, `--output`,
+  `--no-profile`, and `--fail-on-warning`.
+- Stable CLI exit codes: `0` success, `1` error findings (or warnings with
+  `--fail-on-warning`), `2` input or configuration errors.
+- Docs: batch reporting guide and cross-links from ingestion, quickstart, and the
+  production guide.
+
+### Changed
+
+- None. Tier 6 is additive and the artifact format remains `2`.
+
+### Notes
+
+- `CleanerReport.from_csv()` defaults to `on_error="ignore"` so a report is
+  always returned; error-severity findings still make `success` false.
+- Reports contain column names, counts, and messages only; they never include raw
+  cell values, so they are safe to log or attach to an artifact.
+- The CLI reads with `on_error="ignore"` and derives failure from the report
+  instead of raising during ingestion.
+
 ## [2.6.0] - 2026-11-03
 
 ### Added

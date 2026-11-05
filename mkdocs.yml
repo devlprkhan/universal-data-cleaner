@@ -109,6 +109,7 @@ nav:
       - Cleaning data: cleaning.md
       - Contracts & drift: contracts.md
       - Safe ingestion: ingestion.md
+      - Batch reporting: reporting.md
       - Validation, joins & dedup: validation-joins.md
       - ML split audit: ml-split-audit.md
       - Production guide: production.md

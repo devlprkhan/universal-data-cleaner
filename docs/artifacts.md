@@ -131,5 +131,6 @@ manifest = cleaner.to_manifest(X_train, include_fingerprint=True)
 ## Next steps
 
 - [Contracts & drift](contracts.md) for the schema rules referenced by manifests.
+- [Batch reporting](reporting.md) for reviewing decisions, drift, and validation together.
 - [Production guide](production.md) for how to use these artifacts safely.
 - [API reference](api.md) for the exact method signatures.

@@ -25,6 +25,7 @@ The docs site is the central reference. This README is the short entry point.
 | [Cleaning data](https://devlprkhan.github.io/universal-data-cleaner/cleaning/) | Config, roles, imputation, outliers, datetimes |
 | [Contracts & drift](https://devlprkhan.github.io/universal-data-cleaner/contracts/) | `ColumnSpec`, `DataContract`, drift checks |
 | [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV reads and ingestion reports |
+| [Batch reporting](https://devlprkhan.github.io/universal-data-cleaner/reporting/) | `CleanerReport` and the `data-cleaner audit` CLI |
 | [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/) | Expectations, join diagnostics, integrity, dedup |
 | [ML split audit](https://devlprkhan.github.io/universal-data-cleaner/ml-split-audit/) | Duplicate, group, temporal, and target leakage |
 | [Artifacts & reproducibility](https://devlprkhan.github.io/universal-data-cleaner/artifacts/) | Decision log, manifests, fingerprints, save/load |
@@ -101,6 +102,8 @@ for the full explanation.
 - optional missing-value indicators and constant-column dropping
 - safe CSV ingestion with contract-driven coercion, identifier protection, date
   and boolean guards, and an audit report
+- `CleanerReport` combining profile, contract drift, validation, ingestion, and
+  cleaner decisions, plus a `data-cleaner audit` CLI
 - declarative contracts with roles, allowed values, ranges, patterns, and uniqueness
 - automatic train-schema contract inference and transform-time drift reports
 - expectation checks and validation reports

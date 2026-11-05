@@ -171,6 +171,26 @@ cleaner.decision_log()  # every learned or configured decision
 cleaner.drift_report()  # findings from the last transform
 ```
 
+## Audit a batch
+
+Combine the checks into one report before a batch reaches the model:
+
+```python
+from data_cleaner import CleanerReport
+
+report = CleanerReport.from_cleaner(cleaner, X_new, source="production")
+report.raise_if_failed("Batch rejected")
+```
+
+The same report is available from the terminal:
+
+```bash
+python -m data_cleaner audit incoming.csv --contract artifacts/contract.json
+```
+
+Set `--fail-on-warning` to fail the command on warnings and use the exit code in
+CI. See [Batch reporting](reporting.md) for every option.
+
 ## Where to go next
 
 <div class="doc-links" markdown>
@@ -185,6 +205,7 @@ cleaner.drift_report()  # findings from the last transform
 
 - [ML split audit](ml-split-audit.md): duplicates, group leakage, temporal leakage, and target leakage.
 - [Validation, joins & dedup](validation-joins.md): expectations, join diagnostics, and business-key dedup.
+- [Batch reporting](reporting.md): one report for profile, drift, and decisions.
 </div>
 <div markdown>
 <p class="doc-links__title">Ship the rules</p>

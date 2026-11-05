@@ -240,7 +240,7 @@ Deliverables:
 Why fifth: it is a natural front door, but it is closer to a new I/O layer than
 to the existing transformer, so it should not gate the core value.
 
-### Tier 6 — ongoing: Reporting, docs, DX
+### Tier 6 — shipped in `v2.7.0`: Reporting, docs, DX
 
 - `CleanerReport` combining profile + contract + decisions + drift.
 - `python -m data_cleaner audit data.csv` CLI for the above.
@@ -253,7 +253,8 @@ to the existing transformer, so it should not gate the core value.
 
 **Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
 integration modules added in `v2.4.0`; the ML split audit was added in
-`v2.5.0`; safe CSV ingestion was added in `v2.6.0`.** The single
+`v2.5.0`; safe CSV ingestion was added in `v2.6.0`; batch reporting and the
+`audit` CLI were added in `v2.7.0`.** The single
 `data_cleaner.py` module was
 split into a typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker,
 while keeping the public import path and the pickled-artifact qualified name
@@ -262,6 +263,7 @@ stable.
 ```text
 src/data_cleaner/
 ├── __init__.py        # public API re-exports (stable import path)
+├── __main__.py        # `python -m data_cleaner audit` CLI
 ├── _version.py        # __version__, artifact version
 ├── _roles.py          # semantic roles, dtype/identifier helpers
 ├── artifacts.py       # fingerprints and runtime version metadata
@@ -273,11 +275,13 @@ src/data_cleaner/
 ├── integration.py     # join diagnostics, referential integrity, dedup
 ├── ml_audit.py        # audit_split, SplitAudit
 ├── profiling.py       # profile_dataframe, dataset_summary, helpers
+├── reporting.py       # CleanerReport
 └── validation.py      # expectations, ValidationReport
 ```
 
-Future tiers add modules alongside these; Tier 6 is reporting and developer
-experience rather than a new data primitive.
+Tier 6 shipped the reporting and developer-experience layer rather than a new
+data primitive. Future tiers add modules alongside these, starting with Excel
+ingestion on the existing `IngestionReport` model.
 
 Compatibility rules:
 
@@ -346,11 +350,12 @@ expectations, contract validation, join diagnostics, referential integrity, and
 audited deduplication), Tier 4 (`v2.5.0`: `audit_split()` with duplicate and
 near-duplicate overlap, group leakage, temporal leakage, target-leakage
 heuristics, constant/high-cardinality columns, distribution shift, target shift,
-and severity-tagged findings), and Tier 5 (`v2.6.0`: `read_csv_safe()` with
+and severity-tagged findings), Tier 5 (`v2.6.0`: `read_csv_safe()` with
 contract-driven coercion, identifier/date/boolean guards, and an
-`IngestionReport`) are shipped.
+`IngestionReport`), and Tier 6 (`v2.7.0`: `CleanerReport` combining profile,
+contract, decisions, validation, and drift, plus the
+`python -m data_cleaner audit` command) are shipped.
 
-Implement **Tier 6 (`v2.7.0`)**: reporting and developer experience —
-`CleanerReport` combining profile, contract, decisions, validation, and drift,
-plus a `python -m data_cleaner audit` command. Excel ingestion is a follow-up in
-the ingestion track after the unified report.
+Implement **Tier 7 (`v2.8.0`)**: Excel ingestion on the existing
+`IngestionReport` model, reusing the identifier, date, and boolean guards and the
+`CleanerReport` composition layer.

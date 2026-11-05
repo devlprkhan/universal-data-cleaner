@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universal-data-cleaner"
-version = "2.6.0"
+version = "2.7.0"
 description = "Production-ready, scikit-learn-compatible data cleaning transformer for pandas."
 readme = "README.md"
 license = "MIT"
@@ -49,6 +49,9 @@ Documentation = "https://devlprkhan.github.io/universal-data-cleaner/"
 Repository = "https://github.com/devlprkhan/universal-data-cleaner"
 Issues = "https://github.com/devlprkhan/universal-data-cleaner/issues"
 Changelog = "https://github.com/devlprkhan/universal-data-cleaner/blob/main/CHANGELOG.md"
+
+[project.scripts]
+data-cleaner = "data_cleaner.__main__:main"
 
 [dependency-groups]
 docs = [

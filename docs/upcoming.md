@@ -8,26 +8,25 @@ what is shipping next and what is intentionally out of scope.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.7.0` | One batch report: `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
 | `2.6.0` | Safe CSV ingestion with contract-driven coercion and an audit report | Shipped |
 | `2.5.0` | Train/test split and leakage audit | Shipped |
 | `2.4.0` | Expectations, join diagnostics, integrity, and audited dedup | Shipped |
-| `2.3.0` | Decision log, manifests, and fingerprints | Shipped |
 
 ## Next up
 
-### `2.7.0` — One report for the whole batch
+### `2.8.0` — Spreadsheet input on the same report model
 
-The next release focuses on the composition layer rather than another standalone
-helper. The goal is a single review object that answers: *what did this batch look
-like, what changed, and should it reach the model?*
+The next release extends the ingestion layer rather than adding another review
+surface. The goal is to make Excel input as auditable as CSV without changing the
+`IngestionReport` contract.
 
 Planned work:
 
-- `CleanerReport` combining profile, contract drift, decisions, and validation.
-- A small `python -m data_cleaner audit data.csv` command for local review.
-- Consistent `to_markdown()` / `to_dict()` output across reports.
-- Documentation examples that put ingestion, contracts, validation, and the
-  cleaner into one workflow.
+- Optional Excel ingestion using the same `IngestionReport` model.
+- The same identifier, date, and boolean guards for spreadsheet columns.
+- Shared ingestion and reporting examples across CSV and Excel.
+- Continued pandas 2.x/3.x compatibility checks.
 
 ### Later
 
