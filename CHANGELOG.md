@@ -7,6 +7,56 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-06
+
+### Added
+
+- `read_excel_safe()`: read one Excel worksheet as values, normalize every cell
+  to text, apply the same contract-driven guards as `read_csv_safe()`, and return
+  the typed frame with an `IngestionReport`.
+- Worksheet selection with `sheet_name`, accepting either a name or a zero-based
+  index. The resolved sheet is recorded on `IngestionReport.sheet`.
+- `CleanerReport.from_excel()`: attach Excel ingestion findings to the same
+  profile, contract, validation, and decision report as CSV input.
+- `read_excel_safe()` keeps native cell types long enough to detect numeric IDs,
+  then applies per-cell date guards, so a column can mix real dates, `YYYYMMDD`
+  text, and Excel serials.
+- Worksheet selection is by name or non-negative zero-based index; duplicate
+  headers after string conversion are rejected rather than collapsed.
+- `data-cleaner audit` now detects `.xlsx`, `.xlsm`, `.xls`, `.xlsb`, and `.ods`
+  input and accepts `--sheet NAME` or `--sheet-index N`.
+- `numeric_identifier` warning when a contract ID column is stored as numbers in
+  the spreadsheet and has already lost its leading zeros.
+- Optional `excel` extra (`openpyxl>=3.1`) for `.xlsx` and `.xlsm` workbooks.
+  `read_csv_safe()` remains dependency-free.
+- Docs: Excel sections across the ingestion, reporting, quickstart, production,
+  and API guides.
+
+### Changed
+
+- `IngestionReport` gains a `sheet` field (default `None`) and includes it in
+  `to_dict()`. `to_markdown()` now names the source and sheet.
+- `IngestionReport.location` combines the source and resolved sheet, and both
+  warning logs and `IngestionError` messages use it.
+- URL-shaped source labels are stored without credentials or query strings, so
+  signed or authenticated URLs do not leak into reports or logs.
+- Undeclared-column findings now say the column was typed by inference and point
+  to the detected/output kinds in `report.columns`, rather than claiming the
+  column was kept as text.
+- `IngestionReport.raise_if_failed()` defaults to the format-neutral message
+  `"Ingestion failed"`. The exception raised by `read_csv_safe()` still names CSV.
+
+### Notes
+
+- The artifact format remains `2`; this release is additive.
+- Real Excel date cells are parsed directly. Numbers in a datetime column are
+  treated as Excel serial dates and flagged with `excel_serial_date`.
+- Excel cannot preserve leading zeros in a cell stored as a number. The reader
+  warns with `numeric_identifier`, but store identifiers as text to avoid the
+  loss in the first place.
+- `.xls`, `.xlsb`, and `.ods` files need the matching pandas engine (`xlrd`,
+  `pyxlsb`, or `odfpy`); the `excel` extra covers `.xlsx` and `.xlsm`.
+
 ## [2.7.0] - 2026-11-05
 
 ### Added

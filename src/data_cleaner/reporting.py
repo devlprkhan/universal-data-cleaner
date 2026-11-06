@@ -16,7 +16,12 @@ import pandas as pd
 from ._version import __version__
 from .contract import DataContract, DriftReport
 from .decisions import DECISION_COLUMNS
-from .ingestion import IngestionPolicy, IngestionReport, read_csv_safe
+from .ingestion import (
+    IngestionPolicy,
+    IngestionReport,
+    read_csv_safe,
+    read_excel_safe,
+)
 from .profiling import dataset_summary, profile_dataframe
 from .validation import Expectation, ValidationReport, validate
 
@@ -127,7 +132,7 @@ def _as_int(value: object, default: int = 0) -> int:
 
 @dataclass(eq=False)
 class CleanerReport:
-    """A single review object for one DataFrame or CSV batch.
+    """A single review object for one DataFrame, CSV, or Excel batch.
 
     The report combines the dataset profile with contract findings, validation
     results, ingestion findings, and (when available) the cleaner's decision
@@ -146,7 +151,8 @@ class CleanerReport:
     validation:
         Expectation results, when expectations are supplied.
     ingestion:
-        CSV ingestion findings, when the batch came from :func:`read_csv_safe`.
+        CSV or Excel ingestion findings, when the batch came from
+        :func:`read_csv_safe` or :func:`read_excel_safe`.
     decisions:
         The fitted cleaner's decision log, when auditing with a cleaner.
     high_missing_threshold:
@@ -275,6 +281,46 @@ class CleanerReport:
             contract=contract,
             on_error=on_error,
             **read_csv_kwargs,
+        )
+        dataset_name = name or os.path.splitext(os.path.basename(ingestion.source))[0]
+        return cls.from_frame(
+            frame,
+            source=ingestion.source,
+            name=dataset_name or "dataset",
+            contract=contract,
+            expectations=expectations,
+            ingestion=ingestion,
+            include_profile=include_profile,
+            high_missing_threshold=high_missing_threshold,
+        )
+
+    @classmethod
+    def from_excel(
+        cls,
+        source: str | os.PathLike[str] | IO[Any],
+        *,
+        sheet_name: str | int = 0,
+        contract: DataContract | None = None,
+        expectations: Expectation | Sequence[Expectation] | None = None,
+        name: str | None = None,
+        include_profile: bool = True,
+        high_missing_threshold: float | None = 50.0,
+        on_error: IngestionPolicy = "ignore",
+        **read_excel_kwargs: Any,
+    ) -> CleanerReport:
+        """Read one Excel worksheet with :func:`read_excel_safe` and audit it.
+
+        The default ``on_error="ignore"`` always returns a report; error
+        findings still make :attr:`success` false. Pass ``"raise"`` to stop at
+        the first unparseable value instead. Excel support requires the
+        ``excel`` extra (``openpyxl`` for ``.xlsx`` and ``.xlsm``).
+        """
+        frame, ingestion = read_excel_safe(
+            source,
+            contract=contract,
+            sheet_name=sheet_name,
+            on_error=on_error,
+            **read_excel_kwargs,
         )
         dataset_name = name or os.path.splitext(os.path.basename(ingestion.source))[0]
         return cls.from_frame(

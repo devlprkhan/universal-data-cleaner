@@ -72,15 +72,23 @@ config = CleanerConfig(
 
 ## Ingest with an audit trail
 
-Read CSV input through the contract instead of letting pandas infer types
-independently on every run:
+Read CSV or Excel input through the contract instead of letting pandas infer
+types independently on every run:
 
 ```python
-from data_cleaner import read_csv_safe
+from data_cleaner import read_csv_safe, read_excel_safe
 
 X_batch, ingestion = read_csv_safe(
     "incoming.csv",
     contract=contract,
+    on_error="raise",
+)
+
+# Or, with the optional `excel` extra:
+X_batch, ingestion = read_excel_safe(
+    "incoming.xlsx",
+    contract=contract,
+    sheet_name="Orders",
     on_error="raise",
 )
 
@@ -213,7 +221,8 @@ values. Run it in tests and in a pre-model validation step.
 | --- | --- | --- |
 | Required column missing | Upstream schema changed | Contract + `on_drift="raise"` |
 | IDs gained `.0` or lost zeros | ID was treated as numeric | `ColumnSpec(..., role="id")` and `read_csv_safe()` |
-| Currency or percent strings stayed text | Spreadsheet formatting leaked into the file | `read_csv_safe()` and a numeric `ColumnSpec` |
+| Excel IDs lost leading zeros | Cell was stored as a number | Store IDs as text; `read_excel_safe()` reports `numeric_identifier` |
+| Currency or percent strings stayed text | Spreadsheet formatting leaked into the file | `read_csv_safe()` / `read_excel_safe()` and a numeric `ColumnSpec` |
 | Category exploded into rare labels | Unseen values kept | `unseen_category="fill"` or encoder `handle_unknown` |
 | Scores dropped after deploy | Different imputation or bounds | Reuse the saved fitted cleaner |
 | Dates disappeared | Datetime column not declared | Add it to `datetime_columns` |

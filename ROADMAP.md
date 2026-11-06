@@ -247,6 +247,32 @@ to the existing transformer, so it should not gate the core value.
 - Notebook chapter per tier; docs site later.
 - `docs/adr/` architecture decision records.
 
+### Tier 7 — shipped in `v2.8.0`: Spreadsheet input
+
+*Targets pain #5 and finishes the ingestion front door.*
+
+```python
+from data_cleaner import read_excel_safe
+
+frame, report = read_excel_safe(
+    "export.xlsx",
+    contract=contract,
+    sheet_name="Orders",
+    on_error="warn",
+)
+report.sheet  # "Orders"
+```
+
+Deliverables:
+
+- `read_excel_safe()` on the existing `IngestionReport` model.
+- Worksheet selection by name or index, with the resolved sheet recorded.
+- The same identifier, date, numeric, and boolean guards as CSV input.
+- A `numeric_identifier` warning when a contract ID column is stored as numbers
+  and has already lost its leading zeros.
+- `CleanerReport.from_excel()` and `--sheet` support in the `audit` CLI.
+- An optional `excel` extra (`openpyxl`) so the core install stays lean.
+
 ---
 
 ## 5. Package structure
@@ -254,11 +280,10 @@ to the existing transformer, so it should not gate the core value.
 **Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
 integration modules added in `v2.4.0`; the ML split audit was added in
 `v2.5.0`; safe CSV ingestion was added in `v2.6.0`; batch reporting and the
-`audit` CLI were added in `v2.7.0`.** The single
-`data_cleaner.py` module was
-split into a typed `src/data_cleaner/` package with a PEP 561 `py.typed` marker,
-while keeping the public import path and the pickled-artifact qualified name
-stable.
+`audit` CLI were added in `v2.7.0`; Excel ingestion was added in `v2.8.0`.**
+The single `data_cleaner.py` module was split into a typed `src/data_cleaner/`
+package with a PEP 561 `py.typed` marker, while keeping the public import path
+and the pickled-artifact qualified name stable.
 
 ```text
 src/data_cleaner/
@@ -271,7 +296,7 @@ src/data_cleaner/
 ├── config.py          # CleanerConfig
 ├── cleaner.py         # DataCleaner
 ├── decisions.py       # CleaningDecision, decision log
-├── ingestion.py       # read_csv_safe, IngestionReport
+├── ingestion.py       # read_csv_safe, read_excel_safe, IngestionReport
 ├── integration.py     # join diagnostics, referential integrity, dedup
 ├── ml_audit.py        # audit_split, SplitAudit
 ├── profiling.py       # profile_dataframe, dataset_summary, helpers
@@ -280,8 +305,10 @@ src/data_cleaner/
 ```
 
 Tier 6 shipped the reporting and developer-experience layer rather than a new
-data primitive. Future tiers add modules alongside these, starting with Excel
-ingestion on the existing `IngestionReport` model.
+data primitive. Tier 7 completed the ingestion front door with Excel input on
+the existing `IngestionReport` model. Future work focuses on documentation depth,
+notebook chapters, architecture decision records, and continued compatibility
+rather than new core data primitives.
 
 Compatibility rules:
 
@@ -324,7 +351,9 @@ Compatibility rules:
 | `2.3.0` | Decision log + manifest + fingerprints | No |
 | `2.4.0` | Validation + join/integration diagnostics | No |
 | `2.5.0` | ML split/leakage audit | No |
-| `2.6.0` | Safe ingestion | No |
+| `2.6.0` | Safe CSV ingestion | No |
+| `2.7.0` | Batch report + `audit` CLI | No |
+| `2.8.0` | Excel ingestion on the same report model | No |
 | `3.0.0` | Any future breaking import move | Possibly |
 
 Each release: update `CHANGELOG.md`, bump `pyproject.toml`, push, create a
@@ -352,10 +381,13 @@ near-duplicate overlap, group leakage, temporal leakage, target-leakage
 heuristics, constant/high-cardinality columns, distribution shift, target shift,
 and severity-tagged findings), Tier 5 (`v2.6.0`: `read_csv_safe()` with
 contract-driven coercion, identifier/date/boolean guards, and an
-`IngestionReport`), and Tier 6 (`v2.7.0`: `CleanerReport` combining profile,
+`IngestionReport`), Tier 6 (`v2.7.0`: `CleanerReport` combining profile,
 contract, decisions, validation, and drift, plus the
-`python -m data_cleaner audit` command) are shipped.
+`python -m data_cleaner audit` command), and Tier 7 (`v2.8.0`:
+`read_excel_safe()`, worksheet selection, `CleanerReport.from_excel()`, Excel CLI
+input, and the `numeric_identifier` guard) are shipped.
 
-Implement **Tier 7 (`v2.8.0`)**: Excel ingestion on the existing
-`IngestionReport` model, reusing the identifier, date, and boolean guards and the
-`CleanerReport` composition layer.
+The next candidates are documentation and developer-experience work: notebook
+chapters for the major guides, architecture decision records under `docs/adr/`,
+and continued pandas 2.x/3.x and optional-engine compatibility checks. The core
+ingestion and reporting path now covers CSV and Excel.

@@ -1,8 +1,8 @@
-"""Safe CSV ingestion with explicit coercion and an audit report.
+"""Safe CSV and Excel ingestion with explicit coercion and an audit report.
 
-The reader starts by loading every field as text. It then applies either the
+The readers start by loading every field as text. They then apply either the
 supplied :class:`~data_cleaner.DataContract` or a conservative inference pass,
-recording every normalization it performs. The goal is not to guess silently:
+recording every normalization they perform. The goal is not to guess silently:
 the returned frame is typed, and the :class:`IngestionReport` explains what was
 changed and why.
 """
@@ -14,7 +14,9 @@ import os
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import IO, Any, Literal
+from datetime import date, datetime
+from typing import IO, Any, Literal, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import numpy as np
 import pandas as pd
@@ -41,11 +43,28 @@ _RESERVED_READ_KWARGS = {
     "converters",
     "decimal",
     "dtype",
+    "dtype_backend",
+    "false_values",
     "keep_default_na",
     "na_filter",
     "na_values",
     "parse_dates",
     "thousands",
+    "true_values",
+}
+
+_RESERVED_EXCEL_KWARGS = {
+    "converters",
+    "decimal",
+    "dtype",
+    "dtype_backend",
+    "false_values",
+    "keep_default_na",
+    "na_filter",
+    "na_values",
+    "parse_dates",
+    "thousands",
+    "true_values",
 }
 
 _CURRENCY_CHARS = "€£¥₹₽₩¢$"
@@ -105,17 +124,28 @@ _BOOLEAN_FLAG_MESSAGES = {
 
 @dataclass(eq=False)
 class IngestionReport:
-    """Audit report returned by :func:`read_csv_safe`.
+    """Audit report returned by :func:`read_csv_safe` or :func:`read_excel_safe`.
 
     ``findings`` is a tidy DataFrame with ``column``, ``check``, ``severity``,
     ``message``, and ``count`` columns. ``columns`` summarizes how each input
     column was detected and typed. Neither table includes raw cell values.
+
+    ``sheet`` is the resolved worksheet name for Excel input and ``None`` for
+    CSV input.
     """
 
     source: str
     rows: int
     columns: pd.DataFrame
     findings: pd.DataFrame
+    sheet: str | None = None
+
+    @property
+    def location(self) -> str:
+        """Source label, including the resolved sheet for Excel input."""
+        if self.sheet:
+            return f"{self.source} (sheet: {self.sheet})"
+        return self.source
 
     @property
     def success(self) -> bool:
@@ -162,9 +192,9 @@ class IngestionReport:
         """Render the findings as a Markdown table (falls back to text)."""
         status = "PASS" if self.success else "FAIL"
         if self.findings.empty:
-            return f"**{status}** — no ingestion issues detected."
+            return f"**{status}** — no ingestion issues detected in {self.location}."
         lines = [
-            f"**{status}** — {len(self.findings)} finding(s): "
+            f"**{status}** — {len(self.findings)} finding(s) in {self.location}: "
             f"{len(self.errors)} error(s), {len(self.warnings)} warning(s)."
         ]
         try:
@@ -177,13 +207,14 @@ class IngestionReport:
         """Return a JSON-friendly representation of the report."""
         return {
             "source": self.source,
+            "sheet": self.sheet,
             "rows": self.rows,
             "success": self.success,
             "columns": [dict(record) for record in self.columns.to_dict("records")],
             "findings": [dict(record) for record in self.findings.to_dict("records")],
         }
 
-    def raise_if_failed(self, message: str = "CSV ingestion failed") -> None:
+    def raise_if_failed(self, message: str = "Ingestion failed") -> None:
         """Raise ``IngestionError`` when an error-severity finding exists."""
         if not self.success:
             raise IngestionError(f"{message}:\n{self.summary()}", self)
@@ -234,11 +265,31 @@ def _add_flag_findings(
             )
 
 
+def _redact_location(text: str) -> str:
+    """Strip credentials and query strings from a URL-like source label."""
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return text
+    if not parts.scheme or not parts.netloc:
+        return text
+    netloc = parts.netloc.rsplit("@", 1)[-1]
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+
 def _source_label(source: object) -> str:
     if isinstance(source, (str, os.PathLike)):
-        return str(source)
+        return _redact_location(str(source))
     name = getattr(source, "name", None)
-    return str(name) if name else "<stream>"
+    return _redact_location(str(name)) if name else "<stream>"
+
+
+def _is_missing(value: object) -> bool:
+    """Return whether a single cell value is missing, without raising."""
+    try:
+        return bool(pd.isna(cast(Any, value)))
+    except (TypeError, ValueError):
+        return False
 
 
 def _blank_to_na(frame: pd.DataFrame) -> pd.DataFrame:
@@ -353,6 +404,18 @@ def _parse_boolean(
     return parsed, flags, unparseable, has_alpha
 
 
+def _datetime_cell_to_text(value: object, date_format: str | None) -> str:
+    """Render a native datetime cell without losing the declared format."""
+    if _is_missing(value):
+        return ""
+    if isinstance(value, (pd.Timestamp, datetime, date, np.datetime64)):
+        timestamp = pd.Timestamp(value)
+        if date_format is not None:
+            return timestamp.strftime(date_format)
+        return timestamp.isoformat()
+    return str(value).strip()
+
+
 def _parse_datetime(
     series: pd.Series,
     *,
@@ -360,7 +423,7 @@ def _parse_datetime(
     allow_serial: bool,
 ) -> tuple[pd.Series, dict[str, int], int]:
     flags = dict.fromkeys(_DATE_FLAG_MESSAGES, 0)
-    raw = series.map(lambda value: "" if pd.isna(value) else str(value).strip())
+    raw = series.map(lambda value: _datetime_cell_to_text(value, date_format))
     present = raw != ""
     if not present.any():
         return (
@@ -374,29 +437,43 @@ def _parse_datetime(
 
     if date_format is not None:
         parsed = pd.to_datetime(raw.where(present), format=date_format, errors="coerce")
-    elif allow_serial and values.str.fullmatch(r"\d{8}").all():
-        parsed.loc[values.index] = pd.to_datetime(
-            values, format="%Y%m%d", errors="coerce"
-        )
-        flags["compact_date"] = int(values.size)
-    elif allow_serial and values.str.fullmatch(r"\d{5}(?:\.\d+)?").all():
-        serial = pd.to_numeric(values, errors="coerce")
-        parsed.loc[values.index] = pd.to_datetime(
-            serial, unit="D", origin="1899-12-30", errors="coerce"
-        )
-        flags["excel_serial_date"] = int(values.size)
     else:
         try:
             parsed = pd.to_datetime(raw.where(present), errors="coerce", format="mixed")
         except (TypeError, ValueError):
             parsed = pd.to_datetime(raw.where(present), errors="coerce")
 
-        ambiguous = values[values.str.fullmatch(_AMBIGUOUS_DATE_RE)]
-        if not ambiguous.empty:
-            parts = ambiguous.str.extract(_AMBIGUOUS_DATE_RE)
-            first = pd.to_numeric(parts[0], errors="coerce")
-            second = pd.to_numeric(parts[1], errors="coerce")
-            flags["ambiguous_date_format"] = int(((first <= 12) & (second <= 12)).sum())
+    compact = pd.Series(False, index=series.index)
+    serial = pd.Series(False, index=series.index)
+    if allow_serial:
+        compact = raw.str.fullmatch(r"\d{8}").fillna(False) & present
+        serial = raw.str.fullmatch(r"\d{5}(?:\.\d+)?").fillna(False) & present
+        if date_format is not None:
+            fallback = present & parsed.isna()
+            compact = compact & fallback
+            serial = serial & fallback
+
+        if compact.any():
+            parsed.loc[compact] = pd.to_datetime(
+                raw[compact], format="%Y%m%d", errors="coerce"
+            )
+            flags["compact_date"] = int(compact.sum())
+        if serial.any():
+            serial_values = pd.to_numeric(raw[serial], errors="coerce")
+            parsed.loc[serial] = pd.to_datetime(
+                serial_values, unit="D", origin="1899-12-30", errors="coerce"
+            )
+            flags["excel_serial_date"] = int(serial.sum())
+
+    ambiguous_pool = values
+    if allow_serial:
+        ambiguous_pool = values[~(compact.loc[values.index] | serial.loc[values.index])]
+    ambiguous = ambiguous_pool[ambiguous_pool.str.fullmatch(_AMBIGUOUS_DATE_RE)]
+    if not ambiguous.empty:
+        parts = ambiguous.str.extract(_AMBIGUOUS_DATE_RE)
+        first = pd.to_numeric(parts[0], errors="coerce")
+        second = pd.to_numeric(parts[1], errors="coerce")
+        flags["ambiguous_date_format"] = int(((first <= 12) & (second <= 12)).sum())
 
     invalid = int((present & parsed.isna()).sum())
     return parsed, flags, invalid
@@ -588,6 +665,96 @@ def _ingest_column(
     return result, detected
 
 
+def _ingest_frame(
+    frame: pd.DataFrame,
+    contract: DataContract | None,
+    *,
+    source: str,
+    sheet: str | None,
+    on_error: IngestionPolicy,
+    format_name: str,
+    input_label: str,
+    numeric_identifiers: dict[str, int] | None = None,
+) -> tuple[pd.DataFrame, IngestionReport]:
+    """Coerce a string-normalized frame and build the shared audit report."""
+    findings: list[dict[str, object]] = []
+    specs = {spec.name: spec for spec in contract.columns} if contract else {}
+    if contract is not None:
+        for spec in contract.columns:
+            if spec.role != "ignore" and spec.name not in frame.columns:
+                _add_finding(
+                    findings,
+                    spec.name,
+                    "missing_column",
+                    "error",
+                    f"expected column '{spec.name}' is missing from the {input_label}",
+                    1,
+                )
+        for column in frame.columns:
+            if column not in specs:
+                _add_finding(
+                    findings,
+                    str(column),
+                    "undeclared_column",
+                    "warning",
+                    f"column '{column}' is not declared in the contract; it was "
+                    "typed by inference",
+                    1,
+                )
+
+    for column, count in (numeric_identifiers or {}).items():
+        _add_finding(
+            findings,
+            column,
+            "numeric_identifier",
+            "warning",
+            f"column '{column}' is an identifier stored as numbers in the "
+            "spreadsheet; leading zeros may already be lost, so store identifiers "
+            "as text",
+            count,
+        )
+
+    parsed_columns: dict[str, pd.Series] = {}
+    column_rows: list[dict[str, object]] = []
+    for column in frame.columns:
+        parsed, detected = _ingest_column(frame[column], specs.get(column), findings)
+        parsed_columns[str(column)] = parsed
+        column_rows.append(
+            {
+                "column": str(column),
+                "detected_kind": detected,
+                "output_kind": _series_kind(parsed),
+                "output_dtype": str(parsed.dtype),
+                "non_null": int(parsed.notna().sum()),
+                "missing": int(parsed.isna().sum()),
+            }
+        )
+
+    result = pd.DataFrame(parsed_columns, index=frame.index)
+    report = IngestionReport(
+        source=source,
+        rows=len(frame),
+        columns=pd.DataFrame(column_rows, columns=_COLUMN_COLUMNS),
+        findings=pd.DataFrame(findings, columns=_INGESTION_COLUMNS),
+        sheet=sheet,
+    )
+
+    if on_error == "raise" and not report.success:
+        raise IngestionError(
+            f"{format_name} ingestion failed for {report.location}:\n"
+            f"{report.summary()}",
+            report,
+        )
+    if on_error == "warn" and not report.findings.empty:
+        LOGGER.warning(
+            "%s ingestion issues for %s:\n%s",
+            format_name,
+            report.location,
+            report.summary(),
+        )
+    return result, report
+
+
 def read_csv_safe(
     source: str | os.PathLike[str] | IO[Any],
     contract: DataContract | None = None,
@@ -603,17 +770,19 @@ def read_csv_safe(
         Path or file-like object accepted by :func:`pandas.read_csv`.
     contract:
         Optional :class:`~data_cleaner.DataContract`. Declared columns use their
-        role, dtype, and date format. Undeclared columns are kept as text and
-        reported instead of being silently typed.
+        role, dtype, and date format. Undeclared columns are inferred
+        conservatively and reported as ``undeclared_column``; the report lists
+        their detected and output kinds.
     on_error:
         ``"warn"`` logs error findings and returns the frame (default),
         ``"raise"`` raises :class:`IngestionError` when an error finding exists,
         and ``"ignore"`` suppresses logging while still returning the report.
     **read_csv_kwargs:
         Extra options passed to :func:`pandas.read_csv`. Options that would
-        bypass the string-first read (``dtype``, ``na_filter``,
-        ``keep_default_na``, ``na_values``, ``parse_dates``, ``converters``,
-        ``decimal``, or ``thousands``) are rejected.
+        bypass the string-first read (``dtype``, ``dtype_backend``,
+        ``na_filter``, ``keep_default_na``, ``na_values``, ``parse_dates``,
+        ``converters``, ``decimal``, ``thousands``, ``true_values``, or
+        ``false_values``) are rejected.
 
     Returns
     -------
@@ -654,59 +823,220 @@ def read_csv_safe(
         **read_csv_kwargs,
     )
     frame = _blank_to_na(raw)
-
-    findings: list[dict[str, object]] = []
-    specs = {spec.name: spec for spec in contract.columns} if contract else {}
-    if contract is not None:
-        for spec in contract.columns:
-            if spec.role != "ignore" and spec.name not in frame.columns:
-                _add_finding(
-                    findings,
-                    spec.name,
-                    "missing_column",
-                    "error",
-                    f"expected column '{spec.name}' is missing from the CSV",
-                    1,
-                )
-        for column in frame.columns:
-            if column not in specs:
-                _add_finding(
-                    findings,
-                    str(column),
-                    "undeclared_column",
-                    "warning",
-                    f"column '{column}' is not declared in the contract; kept as text",
-                    1,
-                )
-
-    parsed_columns: dict[str, pd.Series] = {}
-    column_rows: list[dict[str, object]] = []
-    for column in frame.columns:
-        parsed, detected = _ingest_column(frame[column], specs.get(column), findings)
-        parsed_columns[str(column)] = parsed
-        column_rows.append(
-            {
-                "column": str(column),
-                "detected_kind": detected,
-                "output_kind": _series_kind(parsed),
-                "output_dtype": str(parsed.dtype),
-                "non_null": int(parsed.notna().sum()),
-                "missing": int(parsed.isna().sum()),
-            }
-        )
-
-    result = pd.DataFrame(parsed_columns, index=frame.index)
-    report = IngestionReport(
+    return _ingest_frame(
+        frame,
+        contract,
         source=_source_label(source),
-        rows=len(frame),
-        columns=pd.DataFrame(column_rows, columns=_COLUMN_COLUMNS),
-        findings=pd.DataFrame(findings, columns=_INGESTION_COLUMNS),
+        sheet=None,
+        on_error=on_error,
+        format_name="CSV",
+        input_label="CSV",
     )
 
-    if on_error == "raise" and not report.success:
-        raise IngestionError(f"CSV ingestion failed:\n{report.summary()}", report)
-    if on_error == "warn" and not report.findings.empty:
-        LOGGER.warning(
-            "CSV ingestion issues for %s:\n%s", report.source, report.summary()
+
+def _excel_cell_to_text(value: object, date_format: str | None) -> object:
+    """Turn one spreadsheet cell into the text form used by the guards."""
+    if _is_missing(value):
+        return pd.NA
+    if isinstance(value, (pd.Timestamp, datetime, date, np.datetime64)):
+        timestamp = pd.Timestamp(value)
+        if date_format is not None:
+            return timestamp.strftime(date_format)
+        return timestamp.isoformat()
+    if isinstance(value, (bool, np.bool_)):
+        return "True" if value else "False"
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    if isinstance(value, (float, np.floating)):
+        number = float(value)
+        return str(int(number)) if number.is_integer() else str(number)
+    return str(value)
+
+
+def _excel_frame_to_text(
+    frame: pd.DataFrame, contract: DataContract | None
+) -> pd.DataFrame:
+    """Normalize every Excel cell to text and turn blanks into missing values."""
+    specs = {spec.name: spec for spec in contract.columns} if contract else {}
+    result = frame.copy(deep=True)
+    for column in result.columns:
+        spec = specs.get(str(column))
+        date_format = spec.date_format if spec is not None else None
+        result[column] = result[column].map(
+            lambda value, fmt=date_format: _excel_cell_to_text(value, fmt)
         )
-    return result, report
+    return _blank_to_na(result)
+
+
+def _is_numeric_cell(value: object) -> bool:
+    """Return whether an Excel cell holds a real number rather than a boolean."""
+    if _is_missing(value):
+        return False
+    if isinstance(value, (bool, np.bool_)):
+        return False
+    return isinstance(value, (int, float, np.integer, np.floating))
+
+
+def _numeric_identifier_counts(
+    frame: pd.DataFrame, contract: DataContract | None
+) -> dict[str, int]:
+    """Count identifier cells that Excel stored as numbers."""
+    if contract is None:
+        return {}
+    counts: dict[str, int] = {}
+    for spec in contract.columns:
+        if spec.role != "id" and not spec.preserve_leading_zeros:
+            continue
+        if spec.name not in frame.columns:
+            continue
+        numeric: pd.Series = frame[spec.name].map(_is_numeric_cell)
+        count = int(numeric.sum())
+        if count:
+            counts[str(spec.name)] = count
+    return counts
+
+
+def read_excel_safe(
+    source: str | os.PathLike[str] | IO[Any],
+    contract: DataContract | None = None,
+    *,
+    sheet_name: str | int = 0,
+    on_error: IngestionPolicy = "warn",
+    **read_excel_kwargs: Any,
+) -> tuple[pd.DataFrame, IngestionReport]:
+    """Read one Excel worksheet, coerce it under a contract, and audit it.
+
+    Parameters
+    ----------
+    source:
+        Path or file-like object accepted by :func:`pandas.ExcelFile`.
+    contract:
+        Optional :class:`~data_cleaner.DataContract`. Declared columns use their
+        role, dtype, and date format. Undeclared columns are inferred
+        conservatively and reported as ``undeclared_column``; the report lists
+        their detected and output kinds.
+    sheet_name:
+        Worksheet to read, either a name or a non-negative zero-based index. The
+        default is the first sheet. The resolved sheet name is recorded on the
+        report.
+    on_error:
+        ``"warn"`` logs error findings and returns the frame (default),
+        ``"raise"`` raises :class:`IngestionError` when an error finding exists,
+        and ``"ignore"`` suppresses logging while still returning the report.
+    **read_excel_kwargs:
+        Extra options passed to :meth:`pandas.ExcelFile.parse`. Options that would
+        bypass the string-first read (``dtype``, ``dtype_backend``,
+        ``na_filter``, ``keep_default_na``, ``na_values``, ``parse_dates``,
+        ``converters``, ``decimal``, ``thousands``, ``true_values``, or
+        ``false_values``) are rejected. ``engine``,
+        ``storage_options``, and ``engine_kwargs`` are forwarded to
+        :class:`pandas.ExcelFile` so the matching pandas engine is used.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, IngestionReport]
+        The typed frame and an audit report. String columns are kept as
+        ``object`` dtype for consistency across pandas 2.x and 3.x.
+
+    Notes
+    -----
+    Excel cells carry native types. The reader keeps those types long enough to
+    detect identifiers stored as numbers, then applies the same identifier,
+    date, numeric, and boolean guards as :func:`read_csv_safe`. Real date cells
+    are parsed directly; numeric serials in a datetime column are parsed as
+    dates and flagged with ``excel_serial_date``.
+
+    An identifier cell that Excel stored as a number has already lost any
+    leading zeros. The report emits a ``numeric_identifier`` warning when a
+    contract declares such a column as an ID. Store identifiers as text in the
+    workbook to preserve them.
+
+    The ``excel`` extra installs ``openpyxl`` for ``.xlsx`` and ``.xlsm`` files.
+    Legacy ``.xls``, ``.xlsb``, and ``.ods`` files need the matching optional
+    pandas engine (``xlrd``, ``pyxlsb``, or ``odfpy``).
+    """
+    if contract is not None and not isinstance(contract, DataContract):
+        raise TypeError("contract must be a DataContract instance or None")
+    if on_error not in {"warn", "raise", "ignore"}:
+        raise ValueError("on_error must be one of: warn, raise, ignore")
+    if isinstance(sheet_name, bool) or not isinstance(sheet_name, (str, int)):
+        raise TypeError("sheet_name must be a single worksheet name or index")
+    if isinstance(sheet_name, int) and sheet_name < 0:
+        raise ValueError("sheet_name index must be zero or greater")
+
+    conflicts = sorted(_RESERVED_EXCEL_KWARGS.intersection(read_excel_kwargs))
+    if conflicts:
+        raise TypeError(
+            "read_excel_safe manages these read_excel options itself: "
+            f"{', '.join(conflicts)}"
+        )
+
+    engine = read_excel_kwargs.pop("engine", None)
+    storage_options = read_excel_kwargs.pop("storage_options", None)
+    engine_kwargs = read_excel_kwargs.pop("engine_kwargs", None)
+
+    try:
+        workbook = pd.ExcelFile(
+            source,
+            engine=engine,
+            storage_options=storage_options,
+            engine_kwargs=engine_kwargs,
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "Excel ingestion requires an optional pandas engine. Install the "
+            'Excel extra with `pip install "universal-data-cleaner[excel]"` '
+            "(openpyxl for .xlsx/.xlsm), or install xlrd, pyxlsb, or odfpy for "
+            "legacy formats."
+        ) from exc
+
+    try:
+        sheet_names = list(workbook.sheet_names)
+        resolved_sheet: str
+        if isinstance(sheet_name, int):
+            try:
+                resolved_sheet = str(sheet_names[sheet_name])
+            except IndexError as exc:
+                raise ValueError(
+                    f"sheet index {sheet_name} is out of range for "
+                    f"{_source_label(source)}; available sheets: {sheet_names}"
+                ) from exc
+        else:
+            resolved_sheet = sheet_name
+            if resolved_sheet not in sheet_names:
+                raise ValueError(
+                    f"sheet '{resolved_sheet}' is missing from "
+                    f"{_source_label(source)}; available sheets: {sheet_names}"
+                )
+
+        raw = workbook.parse(
+            sheet_name=resolved_sheet,
+            dtype=object,
+            keep_default_na=False,
+            na_filter=False,
+            **read_excel_kwargs,
+        )
+    finally:
+        workbook.close()
+
+    raw = raw.copy(deep=True)
+    raw.columns = [str(column) for column in raw.columns]
+    header_index = pd.Index(raw.columns)
+    if header_index.has_duplicates:
+        duplicates = sorted(set(header_index[header_index.duplicated()].tolist()))
+        raise ValueError(
+            f"duplicate column headers in {_source_label(source)} "
+            f"(sheet: {resolved_sheet}): {duplicates}"
+        )
+    numeric_identifiers = _numeric_identifier_counts(raw, contract)
+    frame = _excel_frame_to_text(raw, contract)
+    return _ingest_frame(
+        frame,
+        contract,
+        source=_source_label(source),
+        sheet=resolved_sheet,
+        on_error=on_error,
+        format_name="Excel",
+        input_label="Excel worksheet",
+        numeric_identifiers=numeric_identifiers,
+    )

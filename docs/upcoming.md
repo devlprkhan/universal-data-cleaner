@@ -8,6 +8,7 @@ what is shipping next and what is intentionally out of scope.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
 | `2.7.0` | One batch report: `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
 | `2.6.0` | Safe CSV ingestion with contract-driven coercion and an audit report | Shipped |
 | `2.5.0` | Train/test split and leakage audit | Shipped |
@@ -15,24 +16,23 @@ what is shipping next and what is intentionally out of scope.
 
 ## Next up
 
-### `2.8.0` — Spreadsheet input on the same report model
+### `2.9.0` — Documentation depth and compatibility
 
-The next release extends the ingestion layer rather than adding another review
-surface. The goal is to make Excel input as auditable as CSV without changing the
-`IngestionReport` contract.
+The core ingestion and reporting path now covers CSV and Excel. The next release
+focuses on making that path easier to learn and keep stable rather than adding a
+new data primitive.
 
 Planned work:
 
-- Optional Excel ingestion using the same `IngestionReport` model.
-- The same identifier, date, and boolean guards for spreadsheet columns.
-- Shared ingestion and reporting examples across CSV and Excel.
-- Continued pandas 2.x/3.x compatibility checks.
+- Notebook chapters for the ingestion, reporting, and ML audit guides.
+- Architecture decision records under `docs/adr/`.
+- Continued pandas 2.x/3.x and optional-spreadsheet-engine compatibility checks.
+- Shared examples across CSV, Excel, contracts, and batch reports.
 
 ### Later
 
-- Optional Excel ingestion using the same `IngestionReport` model.
-- Notebook chapters for each major guide.
-- Architecture decision records under `docs/adr/`.
+- Optional Polars backend exploration for large frames.
+- Deeper spreadsheet features such as named ranges and multi-sheet batch reports.
 - Continued compatibility work across pandas 2.x and 3.x.
 
 ## What we are not building

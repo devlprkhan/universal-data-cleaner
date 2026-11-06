@@ -105,11 +105,12 @@ All of it is stored in the fitted object and in saved artifacts.
     Mark IDs and free-text columns with a contract role so they are not treated
     as numeric measurements. See [Contracts & drift](contracts.md).
 
-!!! warning "Letting CSV inference choose types"
+!!! warning "Letting file inference choose types"
 
     `read_csv()` can turn `00123` into `123` or `20240101` into an integer before
     the cleaner ever sees it. Read with a contract instead:
-    `read_csv_safe("export.csv", contract=contract)`. See
+    `read_csv_safe("export.csv", contract=contract)` or
+    `read_excel_safe("export.xlsx", contract=contract, sheet_name="Orders")`. See
     [Safe ingestion](ingestion.md).
 
 ## Save and restore the whole preprocessing step
