@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: refined the documentation site chrome with a light header, quieter
+  navigation and active states, a calmer type scale, and consistent spacing,
+  radii, and motion.
+
 ## [2.8.0] - 2026-11-06
 
 ### Added
