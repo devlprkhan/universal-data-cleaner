@@ -20,6 +20,7 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`CleanerConfig`](#data_cleaner.CleanerConfig) | Configure imputation, outliers, datetime features, contracts, and drift policy |
 | [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
 | [`read_csv_safe`](#data_cleaner.read_csv_safe) | Read CSV as text, coerce under a contract, and audit the conversion |
+| [`read_excel_safe`](#data_cleaner.read_excel_safe) | Read one Excel sheet with the same guards and audit report |
 | [`CleanerReport`](#data_cleaner.CleanerReport) | Combine profile, contract, validation, ingestion, and decisions for one batch |
 | [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
 | [`audit_split`](#data_cleaner.audit_split) | Check a train/test split for leakage before training |
@@ -48,11 +49,16 @@ incrementally.
 
 ## Safe ingestion
 
+`read_excel_safe` requires the optional `excel` extra (`openpyxl` for `.xlsx` and
+`.xlsm`). `read_csv_safe` has no extra dependency.
+
 ::: data_cleaner.IngestionReport
 
 ::: data_cleaner.IngestionError
 
 ::: data_cleaner.read_csv_safe
+
+::: data_cleaner.read_excel_safe
 
 ## Reporting
 

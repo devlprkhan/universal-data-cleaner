@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+import zipfile
 from pathlib import Path
+
+import pandas as pd
 
 from ._version import __version__
 from .cleaner import DataCleaner
 from .contract import DataContract
-from .ingestion import read_csv_safe
+from .ingestion import IngestionReport, read_csv_safe, read_excel_safe
 from .reporting import CleanerReport
+
+_EXCEL_SUFFIXES = {".xls", ".xlsb", ".xlsm", ".xlsx", ".ods"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,13 +33,33 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = subparsers.add_parser(
         "audit",
-        help="Audit a CSV batch and print a report.",
+        help="Audit a CSV or Excel batch and print a report.",
         description=(
-            "Read a CSV safely, then report its profile, contract findings, "
-            "and cleaner decisions."
+            "Read a CSV or Excel file safely, then report its profile, contract "
+            "findings, and cleaner decisions."
         ),
     )
-    audit.add_argument("csv", type=Path, help="CSV file to audit.")
+    audit.add_argument("path", type=Path, help="CSV or Excel file to audit.")
+    sheet = audit.add_mutually_exclusive_group()
+    sheet.add_argument(
+        "--sheet",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Excel worksheet name (defaults to the first sheet); only valid for "
+            "Excel input."
+        ),
+    )
+    sheet.add_argument(
+        "--sheet-index",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Zero-based Excel worksheet index; only valid for Excel input and "
+            "mutually exclusive with --sheet."
+        ),
+    )
     source = audit.add_mutually_exclusive_group()
     source.add_argument(
         "--contract",
@@ -80,6 +105,24 @@ def _load_contract(path: Path) -> DataContract:
     return DataContract.from_json(path.read_text(encoding="utf-8"))
 
 
+def _read_input(
+    path: Path, contract: DataContract | None, sheet: str | int | None
+) -> tuple[pd.DataFrame, IngestionReport]:
+    """Read a CSV or Excel input and return its ingestion report."""
+    if path.suffix.lower() in _EXCEL_SUFFIXES:
+        frame, ingestion = read_excel_safe(
+            path,
+            contract=contract,
+            sheet_name=0 if sheet is None else sheet,
+            on_error="ignore",
+        )
+        return frame, ingestion
+    if sheet is not None:
+        raise ValueError("--sheet is only valid for Excel input")
+    frame, ingestion = read_csv_safe(path, contract=contract, on_error="ignore")
+    return frame, ingestion
+
+
 def _run_audit(args: argparse.Namespace) -> int:
     contract: DataContract | None = None
     cleaner: DataCleaner | None = None
@@ -89,12 +132,9 @@ def _run_audit(args: argparse.Namespace) -> int:
         cleaner = DataCleaner.load(args.cleaner)
         contract = cleaner.fitted_contract()
 
-    frame, ingestion = read_csv_safe(
-        args.csv,
-        contract=contract,
-        on_error="ignore",
-    )
-    dataset_name = args.name or args.csv.stem
+    sheet = args.sheet if args.sheet is not None else args.sheet_index
+    frame, ingestion = _read_input(args.path, contract, sheet)
+    dataset_name = args.name or args.path.stem
     if cleaner is not None:
         report = CleanerReport.from_cleaner(
             cleaner,
@@ -137,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "audit":
         try:
             return _run_audit(args)
-        except (OSError, ValueError, TypeError) as exc:
+        except (ImportError, OSError, TypeError, ValueError, zipfile.BadZipFile) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
     parser.print_help()

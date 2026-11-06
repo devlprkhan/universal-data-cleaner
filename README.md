@@ -24,7 +24,7 @@ The docs site is the central reference. This README is the short entry point.
 | [Leak-safe workflow](https://devlprkhan.github.io/universal-data-cleaner/leak-safe-workflow/) | The fit/transform contract and common mistakes |
 | [Cleaning data](https://devlprkhan.github.io/universal-data-cleaner/cleaning/) | Config, roles, imputation, outliers, datetimes |
 | [Contracts & drift](https://devlprkhan.github.io/universal-data-cleaner/contracts/) | `ColumnSpec`, `DataContract`, drift checks |
-| [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV reads and ingestion reports |
+| [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV and Excel reads with ingestion reports |
 | [Batch reporting](https://devlprkhan.github.io/universal-data-cleaner/reporting/) | `CleanerReport` and the `data-cleaner audit` CLI |
 | [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/) | Expectations, join diagnostics, integrity, dedup |
 | [ML split audit](https://devlprkhan.github.io/universal-data-cleaner/ml-split-audit/) | Duplicate, group, temporal, and target leakage |
@@ -46,6 +46,16 @@ uv add universal-data-cleaner
 
 The distribution name is `universal-data-cleaner`; the import name is
 `data_cleaner`.
+
+For Excel input, install the optional extra:
+
+```bash
+pip install "universal-data-cleaner[excel]"
+```
+
+```bash
+uv add "universal-data-cleaner[excel]"
+```
 
 ```python
 from data_cleaner import CleanerConfig, DataCleaner
@@ -100,8 +110,8 @@ for the full explanation.
 - boolean coercion and imputation
 - datetime parsing plus calendar feature extraction
 - optional missing-value indicators and constant-column dropping
-- safe CSV ingestion with contract-driven coercion, identifier protection, date
-  and boolean guards, and an audit report
+- safe CSV and Excel ingestion with contract-driven coercion, identifier
+  protection, date and boolean guards, and an audit report
 - `CleanerReport` combining profile, contract drift, validation, ingestion, and
   cleaner decisions, plus a `data-cleaner audit` CLI
 - declarative contracts with roles, allowed values, ranges, patterns, and uniqueness

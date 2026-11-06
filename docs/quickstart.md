@@ -70,7 +70,7 @@ train_clean = cleaner.transform(train)
 
 `train_clean` is a new DataFrame; `train` itself is not modified.
 
-## Start from a CSV
+## Start from a CSV or Excel file
 
 When the input is a file, read it with a contract so identifiers, dates, and
 spreadsheet artifacts are handled explicitly:
@@ -96,10 +96,22 @@ train, ingestion = read_csv_safe(
 print(ingestion.findings)
 ```
 
-`read_csv_safe()` reads every field as text first, then applies the contract and
-returns an `IngestionReport`. Use `on_error="raise"` when a failed conversion
-should stop the pipeline. See [Safe ingestion](ingestion.md) for the full
-normalization and reporting rules.
+Excel input uses the same contract through the optional `excel` extra:
+
+```python
+from data_cleaner import read_excel_safe
+
+train, ingestion = read_excel_safe(
+    "export.xlsx",
+    contract=contract,
+    sheet_name="Orders",
+    on_error="warn",
+)
+```
+
+Both readers apply the contract and return an `IngestionReport`. Use
+`on_error="raise"` when a failed conversion should stop the pipeline. See
+[Safe ingestion](ingestion.md) for the full normalization and reporting rules.
 
 ## What `fit` and `transform` mean
 

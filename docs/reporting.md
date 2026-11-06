@@ -61,20 +61,31 @@ report.warnings  # DataFrame of warning findings
 report.raise_if_failed("Batch rejected")
 ```
 
-## Audit a CSV
+## Audit a CSV or Excel file
 
 ```python
 from data_cleaner import CleanerReport
 
 report = CleanerReport.from_csv("incoming.csv", contract=contract)
+report = CleanerReport.from_excel(
+    "incoming.xlsx",
+    contract=contract,
+    sheet_name="Orders",
+)
 ```
 
-`from_csv()` reads through
-[`read_csv_safe()`](ingestion.md) and attaches the resulting `IngestionReport`, so
-ingestion findings appear alongside contract and profile findings. It defaults to
-`on_error="ignore"` so a report is always returned; error findings still make
-`report.success` false. Pass `on_error="raise"` to stop at the first unparseable
-value instead.
+`from_csv()` and `from_excel()` read through
+[`read_csv_safe()` and `read_excel_safe()`](ingestion.md) and attach the resulting
+`IngestionReport`, so ingestion findings appear alongside contract and profile
+findings. They default to `on_error="ignore"` so a report is always returned;
+error findings still make `report.success` false. Pass `on_error="raise"` to stop
+at the first unparseable value instead.
+
+Excel support requires the optional `excel` extra:
+
+```bash
+pip install "universal-data-cleaner[excel]"
+```
 
 ## Audit against a fitted cleaner
 
@@ -116,27 +127,32 @@ The same report is available from the terminal:
 
 ```bash
 python -m data_cleaner audit incoming.csv
+python -m data_cleaner audit incoming.xlsx --sheet Orders
 ```
 
 The installed console script is equivalent:
 
 ```bash
-data-cleaner audit incoming.csv
+data-cleaner audit incoming.xlsx --sheet Orders
 ```
 
-Common options:
+The command detects CSV and Excel input from the file extension. Common options:
 
 | Option | Effect |
 | --- | --- |
 | `--contract contract.json` | Read under `DataContract.from_json()` and check drift |
 | `--cleaner cleaner.joblib` | Load a fitted cleaner and use its contract and decisions |
+| `--sheet NAME` | Excel worksheet to audit by name (defaults to the first sheet) |
+| `--sheet-index N` | Excel worksheet to audit by zero-based index |
 | `--name NAME` | Dataset name in the profile (defaults to the file stem) |
 | `--format markdown\|json` | Output format written to stdout or `--output` |
 | `--output PATH` | Write the report to a file instead of stdout |
 | `--no-profile` | Skip the column profile for faster large-file audits |
 | `--fail-on-warning` | Treat warnings as a failing exit status |
 
-`--contract` and `--cleaner` are mutually exclusive.
+`--contract` and `--cleaner` are mutually exclusive. `--sheet` and
+`--sheet-index` are mutually exclusive, accept only non-negative indices, and are
+valid only for Excel input.
 
 ### Exit codes
 
@@ -144,7 +160,7 @@ Common options:
 | --- | --- |
 | `0` | The report succeeded |
 | `1` | Error findings exist, or warnings exist with `--fail-on-warning` |
-| `2` | The input could not be read, or a contract/artifact could not be loaded |
+| `2` | The input could not be read, a contract/artifact could not be loaded, or a spreadsheet engine is missing |
 
 Use the exit code in CI or a pre-model gate:
 
@@ -160,14 +176,16 @@ python -m data_cleaner audit incoming.csv \
 
 - It does not fit or transform. Call `cleaner.transform()` separately when the
   batch passes review.
-- It does not read Excel yet. Use `read_csv_safe()` for CSV input; other readers
-  can build the same report with `CleanerReport.from_frame()`.
+- It does not install optional spreadsheet engines. Install the `excel` extra for
+  `.xlsx` and `.xlsm`, or another pandas engine for legacy formats.
+- It cannot recover leading zeros that Excel already discarded when an ID was
+  stored as a number. Store identifiers as text in the workbook.
 - It does not replace the cleaner's own drift policy. `on_drift` still controls
   `transform()`; the report is a review layer around it.
 
 ## Related guides
 
-- [Safe ingestion](ingestion.md): the `IngestionReport` attached to CSV audits.
+- [Safe ingestion](ingestion.md): the `IngestionReport` attached to CSV and Excel audits.
 - [Contracts & drift](contracts.md): the checks reported in the contract section.
 - [Validation, joins & dedup](validation-joins.md): expectations and integrity.
 - [Production guide](production.md): wiring the audit into a deployment gate.
