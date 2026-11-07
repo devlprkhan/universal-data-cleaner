@@ -189,27 +189,66 @@ the contract and manifest next to the model.
 <div markdown>
 <p class="doc-links__title">Start here</p>
 
-- [Quickstart](quickstart.md): install, fit, and transform.
-- [Leak-safe workflow](leak-safe-workflow.md): the fit/transform contract.
+<div class="doc-links__row" markdown>
+[Quickstart](quickstart.md)
+<span class="doc-links__desc">Install, fit, and transform.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Leak-safe workflow](leak-safe-workflow.md)
+<span class="doc-links__desc">The fit/transform contract.</span>
+</div>
 </div>
 <div markdown>
 <p class="doc-links__title">Guides</p>
 
-- [Cleaning data](cleaning.md): every configuration option.
-- [Contracts & drift](contracts.md): make schema assumptions explicit.
-- [Safe ingestion](ingestion.md): read CSV or Excel with an audit trail.
-- [Batch reporting](reporting.md): one report for profile, drift, and decisions.
-- [Validation, joins & dedup](validation-joins.md): check batches and keys.
-- [ML split audit](ml-split-audit.md): find contaminated splits.
-- [Production guide](production.md): deploy the same rules safely.
+<div class="doc-links__row" markdown>
+[Cleaning data](cleaning.md)
+<span class="doc-links__desc">Every configuration option.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Contracts & drift](contracts.md)
+<span class="doc-links__desc">Make schema assumptions explicit.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Safe ingestion](ingestion.md)
+<span class="doc-links__desc">Read CSV or Excel with an audit trail.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Batch reporting](reporting.md)
+<span class="doc-links__desc">One report for profile, drift, and decisions.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Validation, joins & dedup](validation-joins.md)
+<span class="doc-links__desc">Check batches and keys.</span>
+</div>
+<div class="doc-links__row" markdown>
+[ML split audit](ml-split-audit.md)
+<span class="doc-links__desc">Find contaminated splits.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Production guide](production.md)
+<span class="doc-links__desc">Deploy the same rules safely.</span>
+</div>
 </div>
 <div markdown>
 <p class="doc-links__title">Reference</p>
 
-- [API reference](api.md): generated from the package docstrings.
-- [Artifacts & reproducibility](artifacts.md): logs, manifests, fingerprints.
-- [Changelog](changelog.md): release notes and behavior changes.
-- [Upcoming](upcoming.md): what ships next and what is out of scope.
+<div class="doc-links__row" markdown>
+[API reference](api.md)
+<span class="doc-links__desc">Generated from the package docstrings.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Artifacts & reproducibility](artifacts.md)
+<span class="doc-links__desc">Logs, manifests, fingerprints.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Changelog](changelog.md)
+<span class="doc-links__desc">Release notes and behavior changes.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Upcoming](upcoming.md)
+<span class="doc-links__desc">What ships next and what is out of scope.</span>
+</div>
 </div>
 </div>
 

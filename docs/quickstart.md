@@ -209,20 +209,41 @@ CI. See [Batch reporting](reporting.md) for every option.
 <div markdown>
 <p class="doc-links__title">Understand the contract</p>
 
-- [Leak-safe workflow](leak-safe-workflow.md): the fit/transform contract and the mistakes it prevents.
-- [Cleaning data](cleaning.md): every configuration option and what it changes.
+<div class="doc-links__row" markdown>
+[Leak-safe workflow](leak-safe-workflow.md)
+<span class="doc-links__desc">The fit/transform contract and the mistakes it prevents.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Cleaning data](cleaning.md)
+<span class="doc-links__desc">Every configuration option and what it changes.</span>
+</div>
 </div>
 <div markdown>
 <p class="doc-links__title">Check the inputs</p>
 
-- [ML split audit](ml-split-audit.md): duplicates, group leakage, temporal leakage, and target leakage.
-- [Validation, joins & dedup](validation-joins.md): expectations, join diagnostics, and business-key dedup.
-- [Batch reporting](reporting.md): one report for profile, drift, and decisions.
+<div class="doc-links__row" markdown>
+[ML split audit](ml-split-audit.md)
+<span class="doc-links__desc">Duplicates, group leakage, temporal leakage, and target leakage.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Validation, joins & dedup](validation-joins.md)
+<span class="doc-links__desc">Expectations, join diagnostics, and business-key dedup.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Batch reporting](reporting.md)
+<span class="doc-links__desc">One report for profile, drift, and decisions.</span>
+</div>
 </div>
 <div markdown>
 <p class="doc-links__title">Ship the rules</p>
 
-- [Artifacts & reproducibility](artifacts.md): decisions, manifests, fingerprints, and save/load.
-- [Production guide](production.md): strict contracts, drift policies, and a deployment checklist.
+<div class="doc-links__row" markdown>
+[Artifacts & reproducibility](artifacts.md)
+<span class="doc-links__desc">Decisions, manifests, fingerprints, and save/load.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Production guide](production.md)
+<span class="doc-links__desc">Strict contracts, drift policies, and a deployment checklist.</span>
+</div>
 </div>
 </div>
