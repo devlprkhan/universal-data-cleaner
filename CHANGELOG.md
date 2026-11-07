@@ -11,7 +11,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - Docs: refined the documentation site chrome with a light header, quieter
   navigation and active states, a calmer type scale, and consistent spacing,
-  radii, and motion.
+  radii, and motion. The "Where to go next" and "Documentation map" sections now
+  render as one joined, rounded table with aligned columns and link-only hover.
 
 ## [2.8.0] - 2026-11-06
 
