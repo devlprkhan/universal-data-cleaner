@@ -273,7 +273,7 @@ Deliverables:
 - `CleanerReport.from_excel()` and `--sheet` support in the `audit` CLI.
 - An optional `excel` extra (`openpyxl`) so the core install stays lean.
 
-### Tier 8 — `v2.9.0`: Reliability hardening
+### Tier 8 — shipped in `v2.9.0`: Reliability hardening
 
 *Consolidates the existing surface instead of adding primitives.*
 
@@ -304,7 +304,8 @@ predictable, not from adding another feature.
 **Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
 integration modules added in `v2.4.0`; the ML split audit was added in
 `v2.5.0`; safe CSV ingestion was added in `v2.6.0`; batch reporting and the
-`audit` CLI were added in `v2.7.0`; Excel ingestion was added in `v2.8.0`.**
+`audit` CLI were added in `v2.7.0`; Excel ingestion was added in `v2.8.0`; reliability hardening shipped in
+`v2.9.0`.**
 The single `data_cleaner.py` module was split into a typed `src/data_cleaner/`
 package with a PEP 561 `py.typed` marker, while keeping the public import path
 and the pickled-artifact qualified name stable.
@@ -412,9 +413,11 @@ contract, decisions, validation, and drift, plus the
 `read_excel_safe()`, worksheet selection, `CleanerReport.from_excel()`, Excel CLI
 input, and the `numeric_identifier` guard) are shipped.
 
-The next milestone is `v2.9.0`, a reliability pass over the existing surface:
-contract enforcement at `fit()` (shipped first, including
-`ColumnSpec(required=False)`), scalable join diagnostics, enforced artifact
-compatibility, explicit outlier clipping, memory-aware CSV ingestion, and a
-documented public API surface. All six modules are shipped; the remaining work is
-documentation depth, notebook chapters, and architecture decision records.
+The latest milestone, `v2.9.0`, is a reliability pass over the existing surface:
+contract enforcement at `fit()` (including `ColumnSpec(required=False)`),
+scalable join diagnostics, enforced artifact compatibility, explicit outlier
+clipping, memory-aware CSV ingestion, and a documented public API surface. All
+six modules are shipped.
+
+The remaining work is documentation depth, notebook chapters, and architecture
+decision records rather than new core data primitives.

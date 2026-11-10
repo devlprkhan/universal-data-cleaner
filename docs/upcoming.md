@@ -8,6 +8,7 @@ what is shipping next and what is intentionally out of scope.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
 | `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
 | `2.7.0` | One batch report: `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
 | `2.6.0` | Safe CSV ingestion with contract-driven coercion and an audit report | Shipped |
@@ -16,22 +17,8 @@ what is shipping next and what is intentionally out of scope.
 
 ## Next up
 
-### `2.9.0` — Reliability hardening
-
-The core ingestion and reporting path now covers CSV and Excel. This release
-hardens the paths that already exist rather than adding another data primitive.
-
-Planned work:
-
-- Contract enforcement at `fit()`: explicit contracts fail fast when a required
-  training column is missing. `ColumnSpec(required=False)` marks optional
-  columns. **Shipped.**
-- Scalable join diagnostics that do not expand many-to-many keys. **Shipped.**
-- Artifact compatibility errors with a documented opt-out and pickle guidance.
-  **Shipped.**
-- Opt-in, per-column outlier clipping with recorded decisions. **Shipped.**
-- Chunked CSV reading with an identifier-precision warning. **Shipped.**
-- Public API stability tiers and a deprecation policy. **Shipped.**
+The core cleaning, ingestion, and reporting paths are in place. The next work is
+documentation depth and developer experience rather than another data primitive.
 
 ### Later
 
