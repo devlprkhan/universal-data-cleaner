@@ -16,21 +16,26 @@ what is shipping next and what is intentionally out of scope.
 
 ## Next up
 
-### `2.9.0` — Documentation depth and compatibility
+### `2.9.0` — Reliability hardening
 
-The core ingestion and reporting path now covers CSV and Excel. The next release
-focuses on making that path easier to learn and keep stable rather than adding a
-new data primitive.
+The core ingestion and reporting path now covers CSV and Excel. This release
+hardens the paths that already exist rather than adding another data primitive.
 
 Planned work:
 
-- Notebook chapters for the ingestion, reporting, and ML audit guides.
-- Architecture decision records under `docs/adr/`.
-- Continued pandas 2.x/3.x and optional-spreadsheet-engine compatibility checks.
-- Shared examples across CSV, Excel, contracts, and batch reports.
+- Contract enforcement at `fit()`: explicit contracts fail fast when a required
+  training column is missing. `ColumnSpec(required=False)` marks optional
+  columns. **Shipped.**
+- Scalable join diagnostics that do not expand many-to-many keys. **Shipped.**
+- Artifact compatibility errors with a documented opt-out and pickle guidance.
+- Opt-in, per-column outlier clipping with recorded decisions.
+- Chunked CSV reading with an identifier-precision warning.
 
 ### Later
 
+- Notebook chapters for the ingestion, reporting, and ML audit guides.
+- Architecture decision records under `docs/adr/`.
+- Shared examples across CSV, Excel, contracts, and batch reports.
 - Optional Polars backend exploration for large frames.
 - Deeper spreadsheet features such as named ranges and multi-sheet batch reports.
 - Continued compatibility work across pandas 2.x and 3.x.

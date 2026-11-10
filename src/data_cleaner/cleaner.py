@@ -40,6 +40,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
     def fit(self, X: pd.DataFrame, y: object | None = None) -> DataCleaner:
         """Learn cleaning rules from training data."""
         frame = self._validate_frame(X, required=None, allow_empty=False)
+        self._validate_training_contract(frame)
         self.decisions_: list[CleaningDecision] = []
         self.contract_ = self._resolve_contract(frame)
         self._record_contract_decision()
@@ -409,6 +410,25 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         if stored is not None:
             return deepcopy(stored)
         return self.to_manifest(X, include_fingerprint=include_fingerprint)
+
+    def _validate_training_contract(self, frame: pd.DataFrame) -> None:
+        """Fail fast when a required explicit-contract column is absent."""
+        contract = self.config.contract
+        if contract is None:
+            return
+        missing = [
+            spec.name
+            for spec in contract.columns
+            if spec.required
+            and spec.role != "ignore"
+            and spec.name not in frame.columns
+        ]
+        if missing:
+            raise ValueError(
+                "Training data is missing required contract columns: "
+                f"{missing}. Add them to the training frame or set "
+                "required=False on the column spec."
+            )
 
     def _resolve_contract(self, frame: pd.DataFrame) -> DataContract | None:
         if self.config.contract is not None:

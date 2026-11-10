@@ -108,7 +108,9 @@ report.raise_if_unsafe()
 
 `diagnose_join` inspects only key columns. It reports duplicate keys, null keys,
 unmatched rows, cardinality, and the actual output row count without
-materializing the full join.
+materializing the full join. Work is bounded by the number of distinct key
+combinations, so heavily duplicated keys cannot trigger a many-to-many
+expansion or a memory spike.
 
 `safe` is false when the join violates the requested cardinality, multiplies rows
 on the preserved side of a left/right join, or has null keys.

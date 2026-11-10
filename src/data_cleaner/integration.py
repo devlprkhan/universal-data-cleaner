@@ -53,6 +53,53 @@ def _duplicate_stats(
     return duplicate_keys, duplicate_rows, null_rows
 
 
+def _key_frequencies(
+    frame: pd.DataFrame, keys: tuple[str, ...], count_name: str
+) -> pd.DataFrame:
+    """Return one row per distinct key combination with its row count."""
+    if frame.empty:
+        return pd.DataFrame(columns=[*keys, count_name])
+    counts = (
+        frame.groupby(list(keys), dropna=False, observed=True)
+        .size()
+        .rename(count_name)
+        .reset_index()
+    )
+    return counts
+
+
+def _join_row_counts(
+    left: pd.DataFrame, right: pd.DataFrame, keys: tuple[str, ...]
+) -> tuple[int, int, int]:
+    """Return (matched, left-only, right-only) output rows without expanding.
+
+    Each side is reduced to one row per distinct key combination, so the outer
+    merge below is bounded by the number of distinct keys rather than the
+    number of key pairs. Multiplicities are restored by multiplying the counts.
+    """
+    if left.empty or right.empty:
+        return 0, len(left), len(right)
+    left_counts = _key_frequencies(left, keys, "__left_count")
+    right_counts = _key_frequencies(right, keys, "__right_count")
+    combined = left_counts.merge(
+        right_counts, on=list(keys), how="outer", indicator=True
+    )
+    matched = combined["_merge"] == "both"
+    both = int(
+        (
+            combined.loc[matched, "__left_count"]
+            * combined.loc[matched, "__right_count"]
+        ).sum()
+    )
+    left_only = int(
+        combined.loc[combined["_merge"] == "left_only", "__left_count"].sum()
+    )
+    right_only = int(
+        combined.loc[combined["_merge"] == "right_only", "__right_count"].sum()
+    )
+    return both, left_only, right_only
+
+
 def _cardinality_matches(
     validate: str | None, left_cardinality: str, right_cardinality: str
 ) -> bool:
@@ -200,16 +247,7 @@ def diagnose_join(
         validate, left_cardinality, right_cardinality
     )
 
-    outer = left[list(keys)].merge(
-        right[list(keys)], on=list(keys), how="outer", indicator=True
-    )
-    if "_merge" in outer.columns:
-        merge_values = outer["_merge"]
-    else:  # pragma: no cover - pandas always adds the indicator
-        merge_values = pd.Series([], dtype=object)
-    both = int((merge_values == "both").sum())
-    left_only = int((merge_values == "left_only").sum())
-    right_only = int((merge_values == "right_only").sum())
+    both, left_only, right_only = _join_row_counts(left, right, keys)
 
     if how == "left":
         output_rows = both + left_only

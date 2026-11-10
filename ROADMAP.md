@@ -273,6 +273,30 @@ Deliverables:
 - `CleanerReport.from_excel()` and `--sheet` support in the `audit` CLI.
 - An optional `excel` extra (`openpyxl`) so the core install stays lean.
 
+### Tier 8 — `v2.9.0`: Reliability hardening
+
+*Consolidates the existing surface instead of adding primitives.*
+
+Six focused modules, each shipped with tests, docs, and a changelog entry:
+
+1. **Contract enforcement at `fit()`** — validate explicit contracts before
+   learning and fail fast when a required training column is missing.
+   `ColumnSpec(required=False)` marks optional columns. *Shipped.*
+2. **Scalable join diagnostics** — compute key frequencies instead of expanding
+   many-to-many joins. *Shipped.*
+3. **Artifact compatibility enforcement** — raise on incompatible artifacts with
+   a documented opt-out, and document the pickle trust boundary.
+4. **Explicit outlier clipping** — make outlier capping opt-in and per-column,
+   and record every clipping decision.
+5. **Memory-aware CSV ingestion** — add chunked reading, reduce copies, and warn
+   when large identifiers lose precision.
+6. **Public API review** — mark stable and experimental surfaces and document the
+   deprecation policy.
+
+Why now: the transformer, contracts, ingestion, diagnostics, and reporting cover
+the intended workflow. The next gain comes from making those paths dependable and
+predictable, not from adding another feature.
+
 ---
 
 ## 5. Package structure
@@ -354,6 +378,7 @@ Compatibility rules:
 | `2.6.0` | Safe CSV ingestion | No |
 | `2.7.0` | Batch report + `audit` CLI | No |
 | `2.8.0` | Excel ingestion on the same report model | No |
+| `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, and ingestion | No |
 | `3.0.0` | Any future breaking import move | Possibly |
 
 Each release: update `CHANGELOG.md`, bump `pyproject.toml`, push, create a
@@ -387,7 +412,9 @@ contract, decisions, validation, and drift, plus the
 `read_excel_safe()`, worksheet selection, `CleanerReport.from_excel()`, Excel CLI
 input, and the `numeric_identifier` guard) are shipped.
 
-The next candidates are documentation and developer-experience work: notebook
-chapters for the major guides, architecture decision records under `docs/adr/`,
-and continued pandas 2.x/3.x and optional-engine compatibility checks. The core
-ingestion and reporting path now covers CSV and Excel.
+The next milestone is `v2.9.0`, a reliability pass over the existing surface:
+contract enforcement at `fit()` (shipped first, including
+`ColumnSpec(required=False)`), scalable join diagnostics, enforced artifact
+compatibility, explicit outlier clipping, and memory-aware CSV ingestion.
+Documentation depth, notebook chapters, and architecture decision records follow
+once those paths are dependable.

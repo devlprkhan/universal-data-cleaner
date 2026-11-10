@@ -7,8 +7,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `ColumnSpec(required=...)` marks a contract column as required or optional.
+
 ### Changed
 
+- Contracts: `DataCleaner.fit()` now validates an explicit contract before
+  learning and raises `ValueError` when a required training column is missing,
+  instead of deferring the failure to `transform()`. Columns with
+  `required=False` or `role="ignore"` may be absent.
+- `diagnose_join()` now computes matched and unmatched rows from grouped key
+  frequencies, so duplicated keys no longer expand into a many-to-many join or
+  risk exhausting memory. Reported row counts are unchanged.
 - Docs: refined the documentation site chrome with a light header, quieter
   navigation and active states, a calmer type scale, and consistent spacing,
   radii, and motion. The "Where to go next" and "Documentation map" sections now
