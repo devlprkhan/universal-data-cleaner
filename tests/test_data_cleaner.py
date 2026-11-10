@@ -18,6 +18,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 import data_cleaner
 from data_cleaner import (
+    ArtifactCompatibilityError,
     CleanerConfig,
     CleaningDecision,
     ColumnSpec,
@@ -75,6 +76,7 @@ def sample_config(**kwargs: Any) -> CleanerConfig:
         "datetime_columns": ("SignupDate",),
         "add_missing_indicators": True,
         "drop_constant_columns": True,
+        "cap_outliers": True,
     }
     defaults.update(kwargs)
     return CleanerConfig(**defaults)
@@ -110,6 +112,41 @@ class DataCleanerTests(unittest.TestCase):
         cleaner = DataCleaner(self.config(cap_outliers=False)).fit(self.features)
         cleaned = cleaner.transform(self.features)
         self.assertTrue((cleaned["Salary"] > 1_000_000).any())
+
+    def test_outlier_capping_is_opt_in(self) -> None:
+        frame = pd.DataFrame({"value": [*range(1, 21), 1000.0]})
+        default = DataCleaner(CleanerConfig()).fit(frame)
+        self.assertFalse(default.config.cap_outliers)
+        self.assertEqual(default.transform(frame)["value"].max(), 1000.0)
+
+        capped = DataCleaner(CleanerConfig(cap_outliers=True)).fit(frame)
+        self.assertLess(capped.transform(frame)["value"].max(), 1000.0)
+
+    def test_outlier_columns_selects_only_named_columns(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "a": [*range(1, 21), 1000.0],
+                "b": [*range(1, 21), 1000.0],
+            }
+        )
+        config = CleanerConfig(
+            numeric_columns=("a", "b"),
+            outlier_columns=("a",),
+        )
+        cleaner = DataCleaner(config).fit(frame)
+        cleaned = cleaner.transform(frame)
+        self.assertLess(cleaned["a"].max(), 1000.0)
+        self.assertEqual(cleaned["b"].max(), 1000.0)
+        self.assertEqual(
+            list(cleaner.outlier_summary().set_index("column").loc["b", ["method"]]),
+            ["disabled"],
+        )
+
+    def test_outlier_columns_must_be_numeric(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0], "label": ["x", "y"]})
+        config = CleanerConfig(outlier_columns=("label",))
+        with self.assertRaises(ValueError):
+            DataCleaner(config).fit(frame)
 
     def test_fit_learns_only_from_training_data(self) -> None:
         train = self.features.iloc[:80].copy()
@@ -502,13 +539,48 @@ class AuditTests(unittest.TestCase):
             joblib.dump(payload, path, compress=3)
 
             with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
-                legacy = DataCleaner.load(path)
+                legacy = DataCleaner.load(path, allow_incompatible=True)
         messages = "\n".join(logs.output)
         self.assertIn("no manifest", messages)
         self.assertIn("no decision log", messages)
         self.assertIn("Artifact version", messages)
         self.assertTrue(legacy.decision_log().empty)
         self.assertIsNotNone(legacy.artifact_manifest())
+
+    def test_incompatible_artifact_version_is_refused(self) -> None:
+        frame = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(frame)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            payload = joblib.load(path)
+            payload["artifact_version"] = 1
+            joblib.dump(payload, path, compress=3)
+
+            with self.assertRaises(ArtifactCompatibilityError):
+                DataCleaner.load(path)
+            with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+                restored = DataCleaner.load(path, allow_incompatible=True)
+            self.assertIn("Artifact version", "\n".join(logs.output))
+            self.assertIsInstance(restored, DataCleaner)
+            skipped = DataCleaner.load(path, verify_version=False)
+            self.assertIsInstance(skipped, DataCleaner)
+
+    def test_incompatible_library_major_is_refused(self) -> None:
+        frame = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(frame)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            payload = joblib.load(path)
+            payload["library_version"] = "3.0.0"
+            joblib.dump(payload, path, compress=3)
+
+            with self.assertRaises(ArtifactCompatibilityError) as ctx:
+                DataCleaner.load(path)
+            self.assertIn("3.0.0", str(ctx.exception))
+            restored = DataCleaner.load(path, allow_incompatible=True)
+            self.assertIsInstance(restored, DataCleaner)
 
 
 class FingerprintTests(unittest.TestCase):
@@ -585,6 +657,13 @@ class PackageTests(unittest.TestCase):
         ):
             self.assertTrue(hasattr(data_cleaner, name), name)
         self.assertRegex(data_cleaner.__version__, r"^\d+\.\d+\.\d+")
+
+    def test_all_exports_are_sorted_unique_and_importable(self) -> None:
+        names = list(data_cleaner.__all__)
+        self.assertEqual(names, sorted(names))
+        self.assertEqual(len(names), len(set(names)))
+        for name in names:
+            self.assertTrue(hasattr(data_cleaner, name), name)
 
     def test_typed_marker_is_installed(self) -> None:
         package_dir = Path(data_cleaner.__file__).parent

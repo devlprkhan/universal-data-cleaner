@@ -10,6 +10,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `ColumnSpec(required=...)` marks a contract column as required or optional.
+- `ArtifactCompatibilityError` is raised by `DataCleaner.load()` when a saved
+  artifact has an incompatible artifact format or library major version.
+  `allow_incompatible=True` loads it with a warning, and `verify_version=False`
+  skips the check entirely. The docs now state the pickle trust boundary.
+- `iter_csv_safe()` streams a large CSV in typed chunks and yields one
+  `(frame, IngestionReport)` pair per chunk, using bounded memory.
+- `CleanerConfig.outlier_columns` names the numeric columns that may be capped.
+  When set it acts as an allowlist and overrides `cap_outliers`.
+- `read_csv_safe()` emits an `integer_precision` warning for integer values
+  beyond `2^53` that are coerced to `float64`, because they may already have lost
+  precision.
 
 ### Changed
 
@@ -20,6 +31,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - `diagnose_join()` now computes matched and unmatched rows from grouped key
   frequencies, so duplicated keys no longer expand into a many-to-many join or
   risk exhausting memory. Reported row counts are unchanged.
+- Outlier clipping is now opt-in: `CleanerConfig.cap_outliers` defaults to
+  `False`. Set it to `True`, or list `outlier_columns`, to keep the previous
+  clipping behavior.
+- CSV ingestion now normalizes blank cells in place instead of copying the whole
+  frame, reducing peak memory for large inputs.
+- Docs: the public API is documented in stable, experimental, and internal tiers
+  with a deprecation policy. `data_cleaner.__all__` is the canonical surface.
 - Docs: refined the documentation site chrome with a light header, quieter
   navigation and active states, a calmer type scale, and consistent spacing,
   radii, and motion. The "Where to go next" and "Documentation map" sections now

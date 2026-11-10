@@ -18,13 +18,14 @@ from .artifacts import (
     compare_fingerprints,
     fingerprint_dataframe,
 )
-from .cleaner import DataCleaner
+from .cleaner import ArtifactCompatibilityError, DataCleaner
 from .config import CleanerConfig
 from .contract import ColumnSpec, Contract, DataContract, DriftReport
 from .decisions import CleaningDecision
 from .ingestion import (
     IngestionError,
     IngestionReport,
+    iter_csv_safe,
     read_csv_safe,
     read_excel_safe,
 )
@@ -59,6 +60,7 @@ from .validation import (
 )
 
 __all__ = [
+    "ArtifactCompatibilityError",
     "CleanerConfig",
     "CleanerReport",
     "CleaningDecision",
@@ -90,6 +92,7 @@ __all__ = [
     "fingerprint_dataframe",
     "has_dtype",
     "in_set",
+    "iter_csv_safe",
     "matches_pattern",
     "not_null",
     "profile_dataframe",

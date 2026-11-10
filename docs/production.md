@@ -68,7 +68,7 @@ config = CleanerConfig(
 | `unseen_category` | `"keep"` for `handle_unknown="ignore"` encoders; `"fill"` if downstream must see a known label |
 | `add_missing_indicators` | `True` when missingness itself is predictive |
 | `drop_constant_columns` | Keep `True` unless a downstream component requires the column |
-| `cap_outliers` | Keep `True` for learned IQR clipping; set `False` when extremes are meaningful |
+| `cap_outliers` | `False` by default; enable it or list `outlier_columns` only when clipping extremes is intended |
 
 ## Ingest with an audit trail
 

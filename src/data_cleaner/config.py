@@ -17,8 +17,9 @@ class CleanerConfig:
     categorical_imputation: Literal["mode", "constant"] = "mode"
     numeric_fill_value: float = 0.0
     categorical_fill_value: str = "Unknown"
-    cap_outliers: bool = True
+    cap_outliers: bool = False
     outlier_multiplier: float = 1.5
+    outlier_columns: tuple[str, ...] = ()
     add_missing_indicators: bool = False
     drop_constant_columns: bool = True
     numeric_columns: tuple[str, ...] = ()
@@ -44,6 +45,7 @@ class CleanerConfig:
             "categorical_columns",
             "datetime_columns",
             "datetime_features",
+            "outlier_columns",
         ):
             object.__setattr__(self, name, tuple(getattr(self, name)))
 
@@ -82,3 +84,12 @@ class CleanerConfig:
                     raise ValueError(
                         f"{left_name} and {right_name} overlap: {sorted(left & right)}"
                     )
+
+        non_numeric_outliers = set(self.outlier_columns) & (
+            set(self.categorical_columns) | set(self.datetime_columns)
+        )
+        if non_numeric_outliers:
+            raise ValueError(
+                "outlier_columns must name numeric columns: "
+                f"{sorted(non_numeric_outliers)}"
+            )
