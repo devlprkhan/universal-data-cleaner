@@ -285,13 +285,13 @@ Six focused modules, each shipped with tests, docs, and a changelog entry:
 2. **Scalable join diagnostics** — compute key frequencies instead of expanding
    many-to-many joins. *Shipped.*
 3. **Artifact compatibility enforcement** — raise on incompatible artifacts with
-   a documented opt-out, and document the pickle trust boundary.
+   a documented opt-out, and document the pickle trust boundary. *Shipped.*
 4. **Explicit outlier clipping** — make outlier capping opt-in and per-column,
-   and record every clipping decision.
+   and record every clipping decision. *Shipped.*
 5. **Memory-aware CSV ingestion** — add chunked reading, reduce copies, and warn
-   when large identifiers lose precision.
+   when large identifiers lose precision. *Shipped.*
 6. **Public API review** — mark stable and experimental surfaces and document the
-   deprecation policy.
+   deprecation policy. *Shipped.*
 
 Why now: the transformer, contracts, ingestion, diagnostics, and reporting cover
 the intended workflow. The next gain comes from making those paths dependable and
@@ -415,6 +415,6 @@ input, and the `numeric_identifier` guard) are shipped.
 The next milestone is `v2.9.0`, a reliability pass over the existing surface:
 contract enforcement at `fit()` (shipped first, including
 `ColumnSpec(required=False)`), scalable join diagnostics, enforced artifact
-compatibility, explicit outlier clipping, and memory-aware CSV ingestion.
-Documentation depth, notebook chapters, and architecture decision records follow
-once those paths are dependable.
+compatibility, explicit outlier clipping, memory-aware CSV ingestion, and a
+documented public API surface. All six modules are shipped; the remaining work is
+documentation depth, notebook chapters, and architecture decision records.

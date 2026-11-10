@@ -13,6 +13,7 @@ import logging
 import os
 import re
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import IO, Any, Literal, cast
@@ -69,6 +70,8 @@ _RESERVED_EXCEL_KWARGS = {
 
 _CURRENCY_CHARS = "€£¥₹₽₩¢$"
 _NUMBER_RE = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_INTEGER_RE = re.compile(r"^[+-]?\d+$")
+_MAX_EXACT_FLOAT_INT = 2**53
 _THOUSANDS_RE = re.compile(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
 _DECIMAL_COMMA_RE = re.compile(r"^[+-]?\d+,\d{1,6}$")
 _AMBIGUOUS_DATE_RE = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}$")
@@ -107,6 +110,8 @@ _NUMERIC_FLAG_MESSAGES = {
     "parentheses; values were treated as negative",
     "decimal_comma": "column '{column}' had {count} value(s) with decimal commas; "
     "commas were treated as decimal points",
+    "integer_precision": "column '{column}' had {count} integer value(s) beyond "
+    "2^53; float64 conversion may lose precision, so store large identifiers as text",
 }
 _DATE_FLAG_MESSAGES = {
     "ambiguous_date_format": "column '{column}' had {count} date(s) with an "
@@ -292,9 +297,9 @@ def _is_missing(value: object) -> bool:
         return False
 
 
-def _blank_to_na(frame: pd.DataFrame) -> pd.DataFrame:
+def _blank_to_na(frame: pd.DataFrame, *, copy: bool = True) -> pd.DataFrame:
     """Turn empty or whitespace-only text fields into missing values."""
-    result = frame.copy(deep=True)
+    result = frame.copy(deep=True) if copy else frame
     for column in result.columns:
         series = result[column]
         blank = series.map(lambda value: isinstance(value, str) and not value.strip())
@@ -357,6 +362,12 @@ def _parse_numeric(
         text, value_flags = _normalize_numeric_text(str(value))
         for flag in value_flags:
             flags[flag] += 1
+        if _INTEGER_RE.fullmatch(text):
+            try:
+                if abs(int(text)) > _MAX_EXACT_FLOAT_INT:
+                    flags["integer_precision"] += 1
+            except ValueError:  # pragma: no cover - regex guarantees digits
+                pass
         normalized.append(text)
         percent_mask.append("percent_symbol" in value_flags)
 
@@ -802,6 +813,9 @@ def read_csv_safe(
     Identifier columns and columns with leading zeros are kept as text. Passing
     a contract is the safest way to protect identifiers and to make date formats
     unambiguous.
+
+    This function reads the whole file into memory. For large files, use
+    :func:`iter_csv_safe`, which yields typed chunks and a per-chunk report.
     """
     if contract is not None and not isinstance(contract, DataContract):
         raise TypeError("contract must be a DataContract instance or None")
@@ -822,7 +836,7 @@ def read_csv_safe(
         na_filter=False,
         **read_csv_kwargs,
     )
-    frame = _blank_to_na(raw)
+    frame = _blank_to_na(raw, copy=False)
     return _ingest_frame(
         frame,
         contract,
@@ -832,6 +846,80 @@ def read_csv_safe(
         format_name="CSV",
         input_label="CSV",
     )
+
+
+def iter_csv_safe(
+    source: str | os.PathLike[str] | IO[Any],
+    contract: DataContract | None = None,
+    *,
+    chunksize: int = 100_000,
+    on_error: IngestionPolicy = "warn",
+    **read_csv_kwargs: Any,
+) -> Iterator[tuple[pd.DataFrame, IngestionReport]]:
+    """Read a CSV in chunks, yielding a typed frame and report per chunk.
+
+    This is the memory-aware counterpart to :func:`read_csv_safe`. Each chunk is
+    read as text, coerced under ``contract``, and audited independently, so the
+    peak memory stays close to ``chunksize`` rows instead of the whole file.
+
+    Parameters
+    ----------
+    source:
+        Path or file-like object accepted by :func:`pandas.read_csv`.
+    contract:
+        Optional :class:`~data_cleaner.DataContract`. Passing a contract keeps
+        typing consistent across chunks; without one, each chunk is inferred
+        independently.
+    chunksize:
+        Number of rows per chunk. Must be a positive integer.
+    on_error:
+        ``"warn"`` logs findings, ``"raise"`` raises
+        :class:`IngestionError` on the first failing chunk, and ``"ignore"``
+        suppresses logging.
+    **read_csv_kwargs:
+        Extra options passed to :func:`pandas.read_csv`. The same reserved
+        string-first options as :func:`read_csv_safe` are rejected.
+
+    Yields
+    ------
+    tuple[pandas.DataFrame, IngestionReport]
+        One typed frame and report per chunk. The report's ``rows`` is the chunk
+        size, not the file size.
+    """
+    if contract is not None and not isinstance(contract, DataContract):
+        raise TypeError("contract must be a DataContract instance or None")
+    if on_error not in {"warn", "raise", "ignore"}:
+        raise ValueError("on_error must be one of: warn, raise, ignore")
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int) or chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    conflicts = sorted(_RESERVED_READ_KWARGS.intersection(read_csv_kwargs))
+    if conflicts:
+        raise TypeError(
+            "iter_csv_safe manages these read_csv options itself: "
+            f"{', '.join(conflicts)}"
+        )
+
+    reader = pd.read_csv(
+        source,
+        dtype=str,
+        keep_default_na=False,
+        na_filter=False,
+        chunksize=chunksize,
+        **read_csv_kwargs,
+    )
+    label = _source_label(source)
+    for raw in reader:
+        frame = _blank_to_na(raw, copy=False)
+        yield _ingest_frame(
+            frame,
+            contract,
+            source=label,
+            sheet=None,
+            on_error=on_error,
+            format_name="CSV",
+            input_label="CSV",
+        )
 
 
 def _excel_cell_to_text(value: object, date_format: str | None) -> object:
@@ -865,7 +953,7 @@ def _excel_frame_to_text(
         result[column] = result[column].map(
             lambda value, fmt=date_format: _excel_cell_to_text(value, fmt)
         )
-    return _blank_to_na(result)
+    return _blank_to_na(result, copy=False)
 
 
 def _is_numeric_cell(value: object) -> bool:

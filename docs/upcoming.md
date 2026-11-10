@@ -28,8 +28,10 @@ Planned work:
   columns. **Shipped.**
 - Scalable join diagnostics that do not expand many-to-many keys. **Shipped.**
 - Artifact compatibility errors with a documented opt-out and pickle guidance.
-- Opt-in, per-column outlier clipping with recorded decisions.
-- Chunked CSV reading with an identifier-precision warning.
+  **Shipped.**
+- Opt-in, per-column outlier clipping with recorded decisions. **Shipped.**
+- Chunked CSV reading with an identifier-precision warning. **Shipped.**
+- Public API stability tiers and a deprecation policy. **Shipped.**
 
 ### Later
 

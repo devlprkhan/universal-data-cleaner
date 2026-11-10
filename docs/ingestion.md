@@ -129,6 +129,28 @@ That makes it safe to log or attach to a build artifact. URL source labels are
 stored without credentials or query strings, so a signed or authenticated URL is
 not copied into logs.
 
+## Large files
+
+`read_csv_safe()` reads the whole file into memory. For large CSVs, stream typed
+chunks instead:
+
+```python
+from data_cleaner import iter_csv_safe
+
+for frame, report in iter_csv_safe("export.csv", contract=contract, chunksize=100_000):
+    process(frame)
+    assert report.rows <= 100_000
+```
+
+Pass a contract to keep typing consistent across chunks; without one, each chunk
+is inferred independently. The DataFrame copy is bounded by `chunksize` rather
+than the file size.
+
+Values that look like integers beyond `2^53` produce an `integer_precision`
+warning when a numeric column is coerced to `float64`, because such identifiers
+may already be losing precision. Store large identifiers as text (`role="id"` or
+`preserve_leading_zeros=True`).
+
 ## Error policy
 
 ```python

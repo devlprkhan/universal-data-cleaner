@@ -13,6 +13,7 @@ from data_cleaner import (
     DataContract,
     IngestionError,
     IngestionReport,
+    iter_csv_safe,
     read_csv_safe,
 )
 
@@ -244,3 +245,39 @@ class SafeCsvIngestionTests(unittest.TestCase):
         self.assertTrue(pd.isna(frame["amount"].iloc[0]))
         self.assertFalse(report.success)
         self.assertTrue(any("ingestion" in message for message in captured.output))
+
+    def test_iter_csv_safe_matches_full_read(self) -> None:
+        csv = "customer_id,amount,signup\n" + "".join(
+            f"{index:03d},{index * 1.5},2024-01-{index:02d}\n" for index in range(1, 11)
+        )
+        contract = DataContract(
+            columns=(
+                ColumnSpec("customer_id", role="id", preserve_leading_zeros=True),
+                ColumnSpec("amount", role="numeric"),
+                ColumnSpec("signup", role="datetime"),
+            )
+        )
+        full, full_report = read_csv_safe(io.StringIO(csv), contract=contract)
+        chunks = list(iter_csv_safe(io.StringIO(csv), contract=contract, chunksize=3))
+        self.assertEqual(len(chunks), 4)
+        pd.testing.assert_frame_equal(
+            pd.concat([frame for frame, _ in chunks], ignore_index=True), full
+        )
+        self.assertEqual(sum(report.rows for _, report in chunks), full_report.rows)
+        self.assertTrue(all(report.rows == 3 for _, report in chunks[:-1]))
+
+    def test_iter_csv_safe_validates_chunksize(self) -> None:
+        for value in (0, -1, True, 1.5):
+            with self.assertRaises(ValueError):
+                list(
+                    iter_csv_safe(
+                        io.StringIO("a\n1\n"),
+                        chunksize=value,  # type: ignore[arg-type]
+                    )
+                )
+
+    def test_large_integer_precision_is_reported(self) -> None:
+        csv = "big\n9007199254740993\n"
+        frame, report = read_csv_safe(io.StringIO(csv), on_error="ignore")
+        self.assertTrue(pd.api.types.is_float_dtype(frame["big"]))
+        self.assertIn("integer_precision", set(report.findings["check"]))

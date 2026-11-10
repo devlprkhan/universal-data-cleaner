@@ -26,6 +26,18 @@ from .decisions import DECISION_COLUMNS, CleaningDecision
 LOGGER = logging.getLogger(__name__)
 
 
+class ArtifactCompatibilityError(RuntimeError):
+    """Raised when a saved artifact cannot be loaded by this library version."""
+
+
+def _major_version(version: object) -> int | None:
+    """Return the major component of a version string, or ``None``."""
+    try:
+        return int(str(version).split(".", 1)[0])
+    except (TypeError, ValueError):
+        return None
+
+
 class DataCleaner(TransformerMixin, BaseEstimator):
     """Fit/transform data cleaner that prevents train/test leakage.
 
@@ -46,6 +58,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self._record_contract_decision()
         frame = self._drop_ignored_columns(frame)
         roles = self._infer_roles(frame)
+        self._validate_outlier_columns(roles)
         self.id_columns_ = [
             column for column in frame.columns if self._role_for(column) == "id"
         ]
@@ -430,6 +443,15 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 "required=False on the column spec."
             )
 
+    def _validate_outlier_columns(self, roles: dict[str, str]) -> None:
+        """Ensure explicit outlier columns resolve to numeric columns."""
+        configured = self.config.outlier_columns
+        if not configured:
+            return
+        invalid = [column for column in configured if roles.get(column) != "numeric"]
+        if invalid:
+            raise ValueError(f"outlier_columns must name numeric columns: {invalid}")
+
     def _resolve_contract(self, frame: pd.DataFrame) -> DataContract | None:
         if self.config.contract is not None:
             return self.config.contract
@@ -499,14 +521,69 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         return target
 
     @classmethod
-    def load(cls, path: str | Path, verify_version: bool = True) -> DataCleaner:
-        """Load a saved cleaner artifact and restore its manifest."""
+    def load(
+        cls,
+        path: str | Path,
+        verify_version: bool = True,
+        *,
+        allow_incompatible: bool = False,
+    ) -> DataCleaner:
+        """Load a saved cleaner artifact and restore its manifest.
+
+        Artifacts written by a different artifact format version or a different
+        library major version are refused by default. Pass
+        ``allow_incompatible=True`` to load them with a warning, or
+        ``verify_version=False`` to skip the compatibility check entirely.
+        ``joblib.load`` uses pickle, so only load artifacts you trust.
+        """
         payload = joblib.load(Path(path))
         if not isinstance(payload, dict) or "cleaner" not in payload:
             raise ValueError("File is not a valid DataCleaner artifact")
         cleaner = payload["cleaner"]
         if not isinstance(cleaner, cls):
             raise TypeError("Artifact does not contain a DataCleaner")
+
+        artifact_version = payload.get("artifact_version")
+        library_version = payload.get("library_version")
+
+        incompatible: list[str] = []
+        if artifact_version is None:
+            incompatible.append("Artifact format version is missing")
+        elif artifact_version != _ARTIFACT_VERSION:
+            incompatible.append(
+                f"Artifact version {artifact_version} is not the current "
+                f"version {_ARTIFACT_VERSION}"
+            )
+        if library_version is None:
+            incompatible.append("Artifact library version is missing")
+        elif _major_version(library_version) != _major_version(__version__):
+            incompatible.append(
+                f"Artifact was created with library {library_version}; the "
+                f"current version is {__version__}"
+            )
+
+        if verify_version and incompatible:
+            reason = "; ".join(incompatible)
+            if not allow_incompatible:
+                raise ArtifactCompatibilityError(
+                    f"Cannot load incompatible artifact: {reason}. Retrain and "
+                    "save with the current version, or pass "
+                    "allow_incompatible=True only if you accept the risk."
+                )
+            LOGGER.warning(
+                "Loading incompatible artifact because allow_incompatible=True: %s",
+                reason,
+            )
+        elif (
+            verify_version
+            and library_version is not None
+            and library_version != __version__
+        ):
+            LOGGER.warning(
+                "Artifact was created with library version %s, current version is %s",
+                library_version,
+                __version__,
+            )
 
         manifest = payload.get("manifest")
         if not isinstance(manifest, dict):
@@ -525,21 +602,6 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             )
         if not hasattr(cleaner, "training_fingerprint_"):
             cleaner.training_fingerprint_ = payload.get("fingerprint")
-
-        artifact_version = payload.get("artifact_version")
-        library_version = payload.get("library_version")
-        if verify_version and library_version != __version__:
-            LOGGER.warning(
-                "Artifact was created with library version %s, current version is %s",
-                library_version,
-                __version__,
-            )
-        if artifact_version != _ARTIFACT_VERSION:
-            LOGGER.warning(
-                "Artifact version %s is not the current version %s",
-                artifact_version,
-                _ARTIFACT_VERSION,
-            )
         return cleaner
 
     def _ensure_fitted(self) -> None:
@@ -838,8 +900,10 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             q1 = q3 = np.nan
             outliers = 0
             iqr = 0.0
+            selected = cfg.outlier_columns
+            cap_enabled = column in selected if selected else cfg.cap_outliers
             should_cap = (
-                cfg.cap_outliers and roles.get(column) == "numeric" and not valid.empty
+                cap_enabled and roles.get(column) == "numeric" and not valid.empty
             )
             if should_cap:
                 q1 = float(valid.quantile(0.25))

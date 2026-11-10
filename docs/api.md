@@ -20,6 +20,7 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`CleanerConfig`](#data_cleaner.CleanerConfig) | Configure imputation, outliers, datetime features, contracts, and drift policy |
 | [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
 | [`read_csv_safe`](#data_cleaner.read_csv_safe) | Read CSV as text, coerce under a contract, and audit the conversion |
+| [`iter_csv_safe`](#data_cleaner.iter_csv_safe) | Stream a large CSV in typed chunks with one audit report per chunk |
 | [`read_excel_safe`](#data_cleaner.read_excel_safe) | Read one Excel sheet with the same guards and audit report |
 | [`CleanerReport`](#data_cleaner.CleanerReport) | Combine profile, contract, validation, ingestion, and decisions for one batch |
 | [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
@@ -57,6 +58,8 @@ incrementally.
 ::: data_cleaner.IngestionError
 
 ::: data_cleaner.read_csv_safe
+
+::: data_cleaner.iter_csv_safe
 
 ::: data_cleaner.read_excel_safe
 
@@ -110,6 +113,8 @@ incrementally.
 
 ## Artifacts and fingerprints
 
+::: data_cleaner.ArtifactCompatibilityError
+
 ::: data_cleaner.fingerprint_dataframe
 
 ::: data_cleaner.compare_fingerprints
@@ -125,6 +130,30 @@ incrementally.
 ::: data_cleaner.drop_duplicate_rows
 
 ::: data_cleaner.assert_frame_clean
+
+## API stability
+
+The package follows semantic versioning for its public API.
+
+| Tier | What it covers | Guarantee |
+| --- | --- | --- |
+| **Stable** | Every name in `data_cleaner.__all__` | No breaking change in the 2.x line |
+| **Experimental** | Names documented as experimental | May change in a minor release; keep usage isolated |
+| **Internal** | Modules prefixed with `_` and attributes ending in `_` | Not part of the public API; do not import or rely on them |
+
+`data_cleaner.__all__` is the canonical public surface. If a name is not listed
+there, it is not supported for direct import. The current release has no
+experimental public names.
+
+### Deprecation policy
+
+- A public name is deprecated with a `DeprecationWarning` and a documented
+  replacement.
+- Deprecated names remain available for at least one minor release.
+- Removals happen only in a major release, with a changelog entry and a migration
+  note.
+- Additive changes (new optional parameters, new reports, new helpers) ship in a
+  minor release and keep existing calls working.
 
 ## API conventions
 

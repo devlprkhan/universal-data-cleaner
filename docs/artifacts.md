@@ -66,8 +66,22 @@ X_new_clean = restored.transform(X_new)
 ```
 
 `save()` embeds the manifest and the training fingerprint in the artifact.
-`load(verify_version=True)` is the default and refuses artifacts written by an
-incompatible version. The artifact format for the 2.x line is `2`.
+`load()` refuses artifacts written by an incompatible artifact format or library
+major version and raises `ArtifactCompatibilityError`. The artifact format for
+the 2.x line is `2`.
+
+If you have deliberately accepted the risk, load an incompatible artifact with a
+warning:
+
+```python
+restored = DataCleaner.load(
+    "artifacts/data_cleaner.joblib",
+    allow_incompatible=True,
+)
+```
+
+`verify_version=False` skips the compatibility check entirely. Artifacts are
+restored with `joblib`, which uses pickle; only load files you trust.
 
 Use `artifact_manifest()` on a loaded cleaner to inspect what was stored:
 

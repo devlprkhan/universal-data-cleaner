@@ -13,8 +13,9 @@ column kind is treated.
 | `categorical_imputation` | `"mode"` | Categorical fill strategy: `mode` or `constant` |
 | `numeric_fill_value` | `0.0` | Fill value when numeric imputation is `constant` |
 | `categorical_fill_value` | `"Unknown"` | Fill value for constant categorical imputation and unseen labels |
-| `cap_outliers` | `True` | Clip numeric values to learned IQR bounds |
+| `cap_outliers` | `False` | Clip numeric values to learned IQR bounds (opt-in) |
 | `outlier_multiplier` | `1.5` | IQR multiplier used for the bounds |
+| `outlier_columns` | `()` | Numeric columns to cap; when set, overrides `cap_outliers` |
 | `add_missing_indicators` | `False` | Add `<column>__is_missing` for columns missing during fit |
 | `drop_constant_columns` | `True` | Drop columns that are constant after cleaning |
 | `numeric_columns` | `()` | Force columns to be treated as numeric |
@@ -68,14 +69,34 @@ with the strategy learned during `fit`.
 config = CleanerConfig(
     numeric_imputation="median",  # or "mean" / "constant"
     numeric_fill_value=0.0,  # only used with "constant"
-    cap_outliers=True,
+    cap_outliers=True,  # opt-in
     outlier_multiplier=1.5,
+    outlier_columns=(),  # optional per-column allowlist
 )
 ```
 
 ### Outlier capping
 
-With `cap_outliers=True`, the cleaner learns lower and upper IQR bounds from the
+Outlier capping is **opt-in**. With `cap_outliers=False` (the default), numeric
+values are imputed but never clipped, so legitimate extremes such as fraud
+signals or high-value transactions survive unchanged.
+
+Enable it for every numeric column:
+
+```python
+CleanerConfig(cap_outliers=True)
+```
+
+Or limit it to specific columns:
+
+```python
+CleanerConfig(outlier_columns=("amount", "balance"))
+```
+
+When `outlier_columns` is non-empty it acts as an allowlist and overrides
+`cap_outliers`; every listed column must be numeric.
+
+With capping enabled, the cleaner learns lower and upper IQR bounds from the
 training column:
 
 <div class="formula" role="math" aria-label="lower equals Q 1 minus k times I Q R; upper equals Q 3 plus k times I Q R">
