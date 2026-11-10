@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-10
+
 ### Added
 
 - `ColumnSpec(required=...)` marks a contract column as required or optional.
