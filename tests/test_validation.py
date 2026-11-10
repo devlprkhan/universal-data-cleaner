@@ -209,6 +209,25 @@ class JoinDiagnosisTests(unittest.TestCase):
         self.assertEqual(report.unmatched_left, 2)
         self.assertEqual(report.unmatched_right, 1)
 
+    def test_many_to_many_counts_rows_without_expansion(self) -> None:
+        left = pd.DataFrame({"k": [1, 1, 2]})
+        right = pd.DataFrame({"k": [1, 1, 1, 3]})
+        report = diagnose_join(left, right, on="k", how="left", validate="m:m")
+        # Key 1: 2 left rows x 3 right rows = 6; key 2 is unmatched = 1.
+        self.assertEqual(report.output_rows, 7)
+        self.assertEqual(report.unmatched_left, 1)
+        self.assertEqual(report.unmatched_right, 1)
+        self.assertAlmostEqual(report.row_multiplier, 7 / 3)
+
+        inner = diagnose_join(left, right, on="k", how="inner", validate="m:m")
+        self.assertEqual(inner.output_rows, 6)
+
+    def test_high_duplication_stays_bounded(self) -> None:
+        left = pd.DataFrame({"k": [1] * 5_000})
+        right = pd.DataFrame({"k": [1] * 5_000})
+        report = diagnose_join(left, right, on="k", how="left", validate="m:m")
+        self.assertEqual(report.output_rows, 25_000_000)
+
     def test_null_keys_make_join_unsafe(self) -> None:
         left = pd.DataFrame({"k": [1, None]})
         right = pd.DataFrame({"k": [1, None]})

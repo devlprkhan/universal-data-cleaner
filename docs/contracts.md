@@ -17,6 +17,7 @@ contract = DataContract(
         ColumnSpec("plan", role="category", allowed_values=("free", "pro", "team")),
         ColumnSpec("email", role="text", pattern=r"[^@]+@[^@]+\.[^@]+"),
         ColumnSpec("notes", role="ignore"),
+        ColumnSpec("coupon", role="category", required=False),
     ],
     strict=True,
 )
@@ -29,6 +30,28 @@ print(cleaner.drift_report())
 ```
 
 The input frame is still cleaned. Drift is **reported**, not repaired.
+
+## Required and optional columns
+
+Every declared column is required by default. When you pass an explicit contract
+to :class:`DataCleaner`, `fit()` checks the training frame before learning
+anything and raises `ValueError` if a required column is missing:
+
+```text
+Training data is missing required contract columns: ['customer_id'].
+Add them to the training frame or set required=False on the column spec.
+```
+
+This catches a broken training schema immediately instead of surfacing it later
+as a drift warning. Two cases are always allowed to be absent:
+
+- `ColumnSpec(..., required=False)` marks an optional column.
+- `ColumnSpec(..., role="ignore")` marks a column the cleaner drops anyway.
+
+An inferred contract never needs this check because it is built from the columns
+that are present. Optional columns that *are* present during `fit()` become part
+of the learned schema and are required at `transform()` time, like any other
+learned column.
 
 ## Column roles
 
@@ -52,6 +75,7 @@ The input frame is still cleaned. Drift is **reported**, not repaired.
 | `name` | required | Column name |
 | `role` | `None` | Semantic role from the table above |
 | `dtype` | `None` | Broad kind or exact dtype to expect |
+| `required` | `True` | Whether the column must be present in the training frame |
 | `nullable` | `True` | Whether missing values are allowed |
 | `unique` | `False` | Whether non-null values must be unique |
 | `allowed_values` | `None` | Allowed category values |
@@ -66,7 +90,7 @@ The input frame is still cleaned. Drift is **reported**, not repaired.
 
 | Check | Severity | Trigger |
 | --- | --- | --- |
-| `missing_column` | spec severity | A declared column is absent |
+| `missing_column` | spec severity | A required declared column is absent |
 | `unexpected_column` | warning | `strict=True` and the frame has an undeclared column |
 | `dtype_change` | spec severity | The column's broad kind changed |
 | `unexpected_missing` | spec severity | A non-nullable column has missing values |

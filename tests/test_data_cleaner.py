@@ -240,7 +240,49 @@ class ContractTests(unittest.TestCase):
         out = cleaner.transform(frame.drop(columns=["meta"]))
         self.assertNotIn("meta", out.columns)
 
-    def test_unexpected_category_is_reported(self) -> None:
+    def test_fit_rejects_missing_required_contract_column(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0]})
+        contract = DataContract(
+            columns=(
+                ColumnSpec("a", role="numeric"),
+                ColumnSpec("b", role="numeric"),
+            )
+        )
+        with self.assertRaises(ValueError) as ctx:
+            DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        message = str(ctx.exception)
+        self.assertIn("missing required contract columns", message)
+        self.assertIn("b", message)
+
+    def test_fit_and_transform_allow_missing_optional_column(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0]})
+        contract = DataContract(
+            columns=(
+                ColumnSpec("a", role="numeric"),
+                ColumnSpec("b", role="numeric", required=False),
+            )
+        )
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        out = cleaner.transform(frame)
+        self.assertIn("a", out.columns)
+        self.assertNotIn("b", out.columns)
+        self.assertTrue(cleaner.drift_report().empty)
+
+    def test_ignored_column_is_not_required_at_fit(self) -> None:
+        frame = pd.DataFrame({"keep": [1.0, 2.0]})
+        contract = DataContract(columns=(ColumnSpec("meta", role="ignore"),))
+        cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(frame)
+        self.assertIn("keep", cleaner.transform(frame).columns)
+
+    def test_optional_column_serialization_roundtrip(self) -> None:
+        contract = DataContract(
+            columns=(ColumnSpec("note", role="text", required=False),)
+        )
+        restored = DataContract.from_json(contract.to_json())
+        spec = restored.spec_for("note")
+        self.assertIsNotNone(spec)
+        self.assertFalse(spec.required)  # type: ignore[union-attr]
+
         frame = pd.DataFrame({"plan": ["free", "pro", "free"]})
         contract = DataContract(
             columns=(

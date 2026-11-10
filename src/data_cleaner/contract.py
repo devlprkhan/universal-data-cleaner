@@ -29,6 +29,8 @@ class ColumnSpec:
     ``role`` tells the cleaner how the column should be treated
     (``numeric``, ``category``, ``boolean``, ``datetime``, ``id``, ``text``,
     ``ignore``). The remaining fields describe optional contract checks.
+    ``required=False`` marks a column that may be absent from the training frame;
+    ``role="ignore"`` columns are always treated as optional.
     """
 
     name: str
@@ -43,6 +45,7 @@ class ColumnSpec:
     date_format: str | None = None
     preserve_leading_zeros: bool = False
     severity: Literal["error", "warning"] = "error"
+    required: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name:
@@ -86,6 +89,7 @@ class ColumnSpec:
             "date_format": self.date_format,
             "preserve_leading_zeros": self.preserve_leading_zeros,
             "severity": self.severity,
+            "required": self.required,
         }
 
     @classmethod
@@ -260,6 +264,8 @@ class DataContract:
             if spec.role == "ignore":
                 continue
             if spec.name not in frame.columns:
+                if not spec.required:
+                    continue
                 findings.append(
                     self._finding(
                         spec,
