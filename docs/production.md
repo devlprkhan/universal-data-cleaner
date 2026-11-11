@@ -257,6 +257,10 @@ Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored i
 the repository. The workflow refuses to publish if the `.publish.attestation`
 files are missing.
 
+Run these checks after every publication. `2.9.0` predates the attestation
+workflow, so its artifacts have no provenance; the next release is the first that
+can be verified.
+
 ## Related guides
 
 - [Leak-safe workflow](leak-safe-workflow.md)

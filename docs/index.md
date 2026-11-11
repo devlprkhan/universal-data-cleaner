@@ -246,6 +246,10 @@ the contract and manifest next to the model.
 <span class="doc-links__desc">Release notes and behavior changes.</span>
 </div>
 <div class="doc-links__row" markdown>
+[Roadmap](roadmap.md)
+<span class="doc-links__desc">Version plan and production-hardening backlog.</span>
+</div>
+<div class="doc-links__row" markdown>
 [Upcoming](upcoming.md)
 <span class="doc-links__desc">What ships next and what is out of scope.</span>
 </div>
