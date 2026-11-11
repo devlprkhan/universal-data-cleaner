@@ -221,8 +221,10 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         if missing:
             raise ValueError(
                 "DataFrame is missing required columns: "
-                f"{missing}. Fit the cleaner on the training schema first."
-                f"\nDrift details:\n{report.summary()}"
+                f"{missing}. Missing fitted input columns are always fatal, "
+                "regardless of on_drift, because the cleaner cannot safely "
+                "reconstruct them. Fit on the training schema and provide every "
+                f"fitted column.\nDrift details:\n{report.summary()}"
             )
         self._handle_drift(report)
         expected = list(self.feature_names_in_)

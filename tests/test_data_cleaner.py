@@ -375,12 +375,29 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ColumnSpec("x", pattern="[unclosed")
 
+    def test_contract_unique_ignores_missing_values(self) -> None:
+        contract = DataContract(columns=(ColumnSpec("id", unique=True),))
+
+        with_nulls = contract.check(pd.DataFrame({"id": [1.0, None, 2.0]}))
+        self.assertNotIn("duplicate_values", set(with_nulls.findings["check"]))
+
+        duplicated = contract.check(pd.DataFrame({"id": [1.0, 1.0, None]}))
+        self.assertIn("duplicate_values", set(duplicated.findings["check"]))
+
     def test_missing_column_still_raises_with_drift_details(self) -> None:
         frame = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
         cleaner = DataCleaner(CleanerConfig()).fit(frame)
         with self.assertRaises(ValueError) as ctx:
             cleaner.transform(frame.drop(columns=["b"]))
         self.assertIn("missing required columns", str(ctx.exception))
+
+    def test_missing_fitted_column_is_fatal_for_every_drift_policy(self) -> None:
+        frame = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+        for policy in ("raise", "warn", "ignore"):
+            cleaner = DataCleaner(CleanerConfig(on_drift=policy)).fit(frame)
+            with self.assertRaises(ValueError) as ctx:
+                cleaner.transform(frame.drop(columns=["b"]))
+            self.assertIn("always fatal", str(ctx.exception))
 
 
 class AuditTests(unittest.TestCase):

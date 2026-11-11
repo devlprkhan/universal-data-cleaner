@@ -266,6 +266,99 @@ class SafeCsvIngestionTests(unittest.TestCase):
         self.assertEqual(sum(report.rows for _, report in chunks), full_report.rows)
         self.assertTrue(all(report.rows == 3 for _, report in chunks[:-1]))
 
+    def test_iter_csv_safe_reuses_first_chunk_schema(self) -> None:
+        csv = "id,amount\n1,10\n2,20\n3,thirty\n"
+
+        chunks = list(iter_csv_safe(io.StringIO(csv), chunksize=2, on_error="ignore"))
+
+        self.assertEqual(len(chunks), 2)
+        first_frame, first_report = chunks[0]
+        second_frame, second_report = chunks[1]
+        self.assertTrue(ptypes.is_numeric_dtype(first_frame["amount"]))
+        self.assertTrue(ptypes.is_numeric_dtype(second_frame["amount"]))
+        self.assertTrue(pd.isna(second_frame["amount"].iloc[0]))
+        self.assertTrue(first_report.success)
+        self.assertIn("unparseable_values", set(second_report.findings["check"]))
+        self.assertFalse(second_report.success)
+
+    def test_iter_csv_safe_detects_cross_chunk_duplicates(self) -> None:
+        csv = "id,value\n1,a\n2,b\n3,c\n1,d\n"
+        contract = DataContract(
+            columns=(
+                ColumnSpec("id", role="numeric", unique=True),
+                ColumnSpec("value", role="text"),
+            )
+        )
+
+        chunks = list(
+            iter_csv_safe(
+                io.StringIO(csv), contract=contract, chunksize=2, on_error="ignore"
+            )
+        )
+
+        self.assertEqual(len(chunks), 2)
+        self.assertTrue(chunks[0][1].success)
+        findings = chunks[1][1].findings
+        duplicates = findings[findings["check"] == "duplicate_values"]
+        self.assertEqual(int(duplicates["count"].sum()), 1)
+        self.assertEqual(duplicates["column"].tolist(), ["id"])
+        self.assertIn("earlier chunks", duplicates["message"].iloc[0])
+
+    def test_iter_csv_safe_detects_duplicates_within_a_chunk(self) -> None:
+        csv = "id,value\n1,a\n1,b\n2,c\n"
+        contract = DataContract(
+            columns=(
+                ColumnSpec("id", role="numeric", unique=True),
+                ColumnSpec("value", role="text"),
+            )
+        )
+
+        chunks = list(
+            iter_csv_safe(
+                io.StringIO(csv), contract=contract, chunksize=3, on_error="ignore"
+            )
+        )
+
+        self.assertEqual(len(chunks), 1)
+        duplicates = chunks[0][1].findings
+        duplicates = duplicates[duplicates["check"] == "duplicate_values"]
+        self.assertEqual(int(duplicates["count"].sum()), 1)
+        self.assertNotIn("earlier chunks", duplicates["message"].iloc[0])
+
+    def test_iter_csv_safe_does_not_double_count_cross_chunk_duplicates(self) -> None:
+        csv = "id\n1\n1\n1\n"
+        contract = DataContract(
+            columns=(ColumnSpec("id", role="numeric", unique=True),)
+        )
+
+        chunks = list(
+            iter_csv_safe(
+                io.StringIO(csv), contract=contract, chunksize=2, on_error="ignore"
+            )
+        )
+
+        first = chunks[0][1].findings
+        first = first[first["check"] == "duplicate_values"]
+        second = chunks[1][1].findings
+        second = second[second["check"] == "duplicate_values"]
+        self.assertEqual(int(first["count"].sum()), 1)
+        self.assertEqual(int(second["count"].sum()), 1)
+
+    def test_read_csv_safe_enforces_unique_columns_and_ignores_nulls(self) -> None:
+        contract = DataContract(
+            columns=(ColumnSpec("id", role="numeric", unique=True),)
+        )
+
+        duplicated = read_csv_safe(
+            io.StringIO("id\n1\n1\n2\n"), contract=contract, on_error="ignore"
+        )[1]
+        self.assertIn("duplicate_values", set(duplicated.findings["check"]))
+
+        with_nulls = read_csv_safe(
+            io.StringIO("id\n1\n\n2\n"), contract=contract, on_error="ignore"
+        )[1]
+        self.assertNotIn("duplicate_values", set(with_nulls.findings["check"]))
+
     def test_iter_csv_safe_validates_chunksize(self) -> None:
         for value in (0, -1, True, 1.5):
             with self.assertRaises(ValueError):

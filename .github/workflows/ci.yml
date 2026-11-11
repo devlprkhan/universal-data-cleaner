@@ -77,6 +77,46 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+  compatibility:
+    name: compat (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minimum
+            python-version: "3.10"
+            pins: "pandas==2.2.0 numpy==1.26.0 scikit-learn==1.4.0 joblib==1.3.0"
+          - name: latest
+            python-version: "3.12"
+            pins: ""
+          - name: pandas-3
+            python-version: "3.12"
+            pins: "pandas>=3,<4"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Create a clean environment
+        run: uv venv --python ${{ matrix.python-version }} .venv-compat
+
+      - name: Install project and pinned dependencies
+        env:
+          PINS: ${{ matrix.pins }}
+        run: uv pip install --python .venv-compat/bin/python -e . pytest openpyxl $PINS
+
+      - name: Show resolved dependency versions
+        run: uv pip list --python .venv-compat/bin/python
+
+      - name: Run tests
+        run: .venv-compat/bin/python -m pytest
+
   build:
     name: build
     needs: [lint, typecheck, test]
@@ -103,6 +143,84 @@ jobs:
           name: dist
           path: dist/
 
+  installed-wheel:
+    name: installed wheel
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create a clean environment
+        run: uv venv --python 3.12 .venv-wheel
+
+      - name: Install the built wheel
+        run: uv pip install --python .venv-wheel/bin/python dist/*.whl pytest
+
+      - name: Verify imports and public exports
+        run: |
+          .venv-wheel/bin/python - <<'PY'
+          import data_cleaner
+
+          assert data_cleaner.__version__
+          missing = [name for name in data_cleaner.__all__ if not hasattr(data_cleaner, name)]
+          assert not missing, f"missing public exports: {missing}"
+          print(f"imports OK: {data_cleaner.__version__} ({len(data_cleaner.__all__)} exports)")
+          PY
+
+      - name: Run an end-to-end cleaning workflow
+        run: |
+          .venv-wheel/bin/python - <<'PY'
+          import pandas as pd
+
+          from data_cleaner import CleanerConfig, DataCleaner
+
+          frame = pd.DataFrame(
+              {
+                  "customer_id": ["001", "002", "003", "004"],
+                  "amount": [10.0, None, 30.0, 40.0],
+                  "plan": ["free", "pro", "free", "pro"],
+              }
+          )
+          cleaner = DataCleaner(CleanerConfig()).fit(frame)
+          cleaned = cleaner.transform(frame)
+
+          assert len(cleaned) == len(frame)
+          assert int(cleaned.isna().sum().sum()) == 0
+          assert list(cleaned["customer_id"]) == ["001", "002", "003", "004"]
+          print("end-to-end workflow OK")
+          PY
+
+      - name: Verify the CLI
+        run: |
+          .venv-wheel/bin/data-cleaner --version
+          .venv-wheel/bin/python - <<'PY'
+          from pathlib import Path
+
+          Path("smoke.csv").write_text("id,amount\n1,10\n2,20\n", encoding="utf-8")
+          PY
+          .venv-wheel/bin/data-cleaner audit smoke.csv --no-profile --format json > audit.json
+          .venv-wheel/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+
+          assert json.loads(Path("audit.json").read_text(encoding="utf-8"))
+          print("CLI audit OK")
+          PY
+          .venv-wheel/bin/python -m data_cleaner --version
+
   docs:
     name: docs
     runs-on: ubuntu-latest
@@ -125,7 +243,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [lint, typecheck, test, build, docs]
+    needs: [lint, typecheck, test, compatibility, build, installed-wheel, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Fail when any required job failed
@@ -133,6 +251,8 @@ jobs:
           needs.lint.result != 'success' ||
           needs.typecheck.result != 'success' ||
           needs.test.result != 'success' ||
+          needs.compatibility.result != 'success' ||
           needs.build.result != 'success' ||
+          needs.installed-wheel.result != 'success' ||
           needs.docs.result != 'success'
         run: exit 1

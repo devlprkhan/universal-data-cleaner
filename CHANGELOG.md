@@ -7,6 +7,32 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- CI now tests the minimum supported dependency versions on Python 3.10, the
+  latest stable dependency set, and pandas 3.x.
+- CI installs the built wheel in a clean environment and checks imports, public
+  exports, the CLI, and a small end-to-end cleaning workflow.
+- Release builds generate PEP 740 attestations for PyPI and GitHub
+  build-provenance attestations, so published artifacts can be verified against
+  the workflow that built them.
+
+### Changed
+
+- `iter_csv_safe()` now infers the schema from the first chunk and reuses it for
+  every later chunk. A later value that does not fit the inferred type is
+  reported as `unparseable_values` instead of silently changing the column dtype.
+  Pass an explicit contract when the first chunk may not be representative.
+- Safe ingestion now enforces `ColumnSpec(unique=True)` and reports
+  `duplicate_values`. Duplicates are detected within a frame and, for
+  `iter_csv_safe()`, across chunks. Missing values are ignored.
+- `DataContract.check()` now ignores missing values for `unique=True`, matching
+  the documented "non-null values must be unique" behavior and the validation
+  helper.
+- `DataCleaner.transform()` now states that a missing fitted input column is
+  always fatal, regardless of `on_drift`, because the cleaner cannot safely
+  reconstruct it. The documentation matches the behavior.
+
 ## [2.9.0] - 2026-11-10
 
 ### Added

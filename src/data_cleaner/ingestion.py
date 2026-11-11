@@ -676,6 +676,50 @@ def _ingest_column(
     return result, detected
 
 
+def _check_unique_values(
+    result: pd.DataFrame,
+    specs: dict[str, ColumnSpec],
+    findings: list[dict[str, object]],
+    seen: dict[str, pd.Index] | None,
+) -> None:
+    """Report duplicate values for ``unique=True`` columns.
+
+    Missing values are ignored, matching the contract check. When ``seen`` is
+    supplied, values from earlier chunks are included so streaming ingestion can
+    detect cross-chunk duplicates.
+    """
+    for column, spec in specs.items():
+        if not spec.unique or column not in result.columns:
+            continue
+        values = result[column].dropna()
+        if values.empty:
+            continue
+        within = int(values.duplicated().sum())
+        previous = seen.get(column) if seen is not None else None
+        current = pd.Index(values.drop_duplicates())
+        across = (
+            int(current.isin(previous).sum())
+            if previous is not None and len(previous)
+            else 0
+        )
+        if seen is not None:
+            seen[column] = (
+                current if previous is None else previous.union(current, sort=False)
+            )
+        duplicates = within + across
+        if duplicates:
+            detail = f", including {across} from earlier chunks" if across else ""
+            _add_finding(
+                findings,
+                column,
+                "duplicate_values",
+                spec.severity,
+                f"column '{column}' has {duplicates} duplicate value(s)"
+                f"{detail}; it is declared unique",
+                duplicates,
+            )
+
+
 def _ingest_frame(
     frame: pd.DataFrame,
     contract: DataContract | None,
@@ -686,6 +730,7 @@ def _ingest_frame(
     format_name: str,
     input_label: str,
     numeric_identifiers: dict[str, int] | None = None,
+    unique_seen: dict[str, pd.Index] | None = None,
 ) -> tuple[pd.DataFrame, IngestionReport]:
     """Coerce a string-normalized frame and build the shared audit report."""
     findings: list[dict[str, object]] = []
@@ -742,6 +787,7 @@ def _ingest_frame(
         )
 
     result = pd.DataFrame(parsed_columns, index=frame.index)
+    _check_unique_values(result, specs, findings, unique_seen)
     report = IngestionReport(
         source=source,
         rows=len(frame),
@@ -868,8 +914,10 @@ def iter_csv_safe(
         Path or file-like object accepted by :func:`pandas.read_csv`.
     contract:
         Optional :class:`~data_cleaner.DataContract`. Passing a contract keeps
-        typing consistent across chunks; without one, each chunk is inferred
-        independently.
+        typing consistent across chunks. Without one, the schema is inferred from
+        the first chunk and reused for every later chunk, so a later value that
+        does not fit the inferred type is reported instead of silently changing
+        the column's dtype.
     chunksize:
         Number of rows per chunk. Must be a positive integer.
     on_error:
@@ -885,6 +933,13 @@ def iter_csv_safe(
     tuple[pandas.DataFrame, IngestionReport]
         One typed frame and report per chunk. The report's ``rows`` is the chunk
         size, not the file size.
+
+    Notes
+    -----
+    ``ColumnSpec(unique=True)`` is checked within each chunk and against values
+    seen in earlier chunks. Missing values are ignored. Cross-chunk tracking
+    keeps one entry per distinct value in the unique columns, so its memory grows
+    with cardinality rather than with the number of rows.
     """
     if contract is not None and not isinstance(contract, DataContract):
         raise TypeError("contract must be a DataContract instance or None")
@@ -909,16 +964,33 @@ def iter_csv_safe(
         **read_csv_kwargs,
     )
     label = _source_label(source)
+    active_contract = contract
+    unique_seen: dict[str, pd.Index] = {}
     for raw in reader:
         frame = _blank_to_na(raw, copy=False)
+        if active_contract is None:
+            typed, report = _ingest_frame(
+                frame,
+                None,
+                source=label,
+                sheet=None,
+                on_error=on_error,
+                format_name="CSV",
+                input_label="CSV",
+                unique_seen=unique_seen,
+            )
+            active_contract = DataContract.infer_from(typed, strict=True)
+            yield typed, report
+            continue
         yield _ingest_frame(
             frame,
-            contract,
+            active_contract,
             source=label,
             sheet=None,
             on_error=on_error,
             format_name="CSV",
             input_label="CSV",
+            unique_seen=unique_seen,
         )
 
 

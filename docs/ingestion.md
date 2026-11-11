@@ -142,9 +142,17 @@ for frame, report in iter_csv_safe("export.csv", contract=contract, chunksize=10
     assert report.rows <= 100_000
 ```
 
-Pass a contract to keep typing consistent across chunks; without one, each chunk
-is inferred independently. The DataFrame copy is bounded by `chunksize` rather
-than the file size.
+Pass a contract to keep typing consistent across chunks. Without one, the
+schema is inferred from the first chunk and reused for every later chunk, so a
+later value that does not fit the inferred type is reported as an
+`unparseable_values` finding instead of silently changing the column dtype. The
+first chunk therefore defines the stream's schema; pass an explicit contract when
+the first chunk may not be representative.
+
+The DataFrame copy is bounded by `chunksize` rather than the file size.
+`ColumnSpec(unique=True)` is checked within each chunk and against values seen in
+earlier chunks. Missing values are ignored. The seen-value index keeps one entry
+per distinct value, so its memory grows with cardinality rather than row count.
 
 Values that look like integers beyond `2^53` produce an `integer_precision`
 warning when a numeric column is coerced to `float64`, because such identifiers
@@ -177,6 +185,30 @@ except IngestionError as exc:
     print(exc.report.findings)
     raise
 ```
+
+## Declared constraints
+
+The safe readers apply the declaration checks that make sense during ingestion,
+so problems surface before a frame reaches the cleaner:
+
+```python
+from data_cleaner import ColumnSpec, DataContract
+
+contract = DataContract(
+    columns=(
+        ColumnSpec("order_id", role="id", unique=True),
+        ColumnSpec("amount", role="numeric", min_value=0),
+    )
+)
+
+frame, report = read_csv_safe("orders.csv", contract=contract)
+```
+
+`unique=True` reports a `duplicate_values` finding for repeated non-null values;
+missing values are ignored, matching `DataContract.check()`. In
+`iter_csv_safe()`, duplicates are also detected across chunks. Range, category,
+and pattern checks stay with `DataContract.check()` and the cleaner's drift
+report, because they need the full column rather than a single chunk.
 
 ## What gets normalized
 
