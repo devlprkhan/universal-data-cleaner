@@ -1,423 +1,542 @@
-# Universal Data Cleaner — Product Roadmap
+# Universal Data Cleaner — Production Roadmap
 
-This roadmap turns the 2026 data-preparation research into features that fit a
-small, leak-safe, scikit-learn-compatible cleaning library.
+> **Baseline:** `v2.9.0` (published 2026-11-10) plus the post-release hardening
+> already merged to `main` (PR #38).
+> **Current target:** `v2.9.1` — ship the merged fixes and prove the new release
+> provenance gate. **Then:** `v2.10.0` — production correctness.
+>
+> This roadmap is the working plan. Every version below is a scoped, tested,
+> documented, and verified release — not a wish list.
 
-It is deliberately opinionated. The research shows that most *mechanical*
-cleaning is already solved by pandas, OpenRefine, Great Expectations, dbt, and
-friends. The durable opportunity for this library is narrower:
+Universal Data Cleaner is a **production-grade, auditable, reproducible tabular
+data preparation and quality-assurance toolkit for Python and scikit-learn**.
 
-> Make the assumptions behind a cleaning step **explicit**, **checkable**,
-> **explainable**, and **reusable on the next batch** — without turning the
-> library into an orchestration or observability platform.
+It covers one lifecycle and does it end to end:
+
+```text
+raw data
+  -> ingestion and normalization
+  -> contract enforcement
+  -> cleaning and transformation
+  -> validation and quality assurance
+  -> audit, reproducibility, and monitoring hooks
+  -> trusted ML-ready dataset
+```
+
+The durable value is not another cleaning function. It is making the assumptions
+behind a cleaning step **explicit**, **checkable**, **explainable**, and
+**reusable on the next batch** — without becoming an orchestration or
+observability platform.
 
 ---
 
-## 1. Positioning
+## 1. Scope and boundary
 
 ### What this library is
 
-- A **per-dataset, in-process transformer** for pandas + scikit-learn.
-- **Leak-safe by construction**: fit on training data, reuse learned rules at
+- A **per-dataset, in-process transformer** for pandas and scikit-learn.
+- **Leak-safe by construction:** fit on training data, reuse learned rules at
   inference, never mutate the input, never drop inference rows.
-- **Auditable**: every learned/overridden decision has a reason and can be
+- **Auditable:** every learned or overridden decision has a reason and can be
   inspected, exported, versioned, and reloaded.
+- **Quality-aware:** safe ingestion, contracts, expectations, drift reports,
+  split audits, and reproducible fingerprints in one dependency-light package.
 
 ### What this library is not
 
-- Not an orchestrator or scheduler (Airflow, Dagster, Prefect).
-- Not a data-observability platform (Monte Carlo, Soda Cloud, Elementary).
-- Not an enterprise governance/ownership system.
-- Not a replacement for dbt, Great Expectations, or Soda.
-- Not an auto-ML tool that decides business meaning for the user.
+Keep this boundary. Integrate with these systems; do not rebuild them.
 
-Those are real problems in the research, but they are **organizational or
-platform-level** problems. Solving them in a pandas transformer would create a
-worse, heavier version of tools that already exist.
-
----
-
-## 2. Research → Feature Mapping
-
-Scores are the research-priority scores from the landscape document.
-
-| # | Pain point | Score | Fit for this library | Feature theme | Tier |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Unexpected schema / type / format changes | 9.1 | High | Declarative column contracts + drift detection at `transform()` | **1** |
-| 7 | Repeated missing / outlier / duplicate decisions | 7.8 | High (core already) | Record *why* each decision was made; decision log | **1** |
-| 8 | Hard-to-reproduce transforms, weak lineage | 7.7 | High | Reproducible artifact manifest + data/schema fingerprint | **2** |
-| 2 | Cross-source integration / entity matching | 8.9 | Medium–High (pure helpers) | Join-cardinality + key diagnostics; business-key dedup | **3** |
-| 3 | Data-quality failures found too late | 8.9 | Medium | Lightweight expectation validation + human-readable report | **3** |
-| 4 | ML leakage / contaminated evaluation | 8.3 | High | Train/test split audit (groups, time, duplicates, leakage) | **4** |
-| 5 | Spreadsheet transformations, no audit trail | 8.2 | Medium | Safe CSV/Excel ingestion with type/format reporting | **5** |
-| 6 | Inconsistent business definitions | 8.1 | Low–Medium | Contract exported as reviewable YAML/JSON (ownership artifact) | **2/6** |
-| 9 | Large, nested, semi-structured, multi-modal data | 7.2 | Low | Explicit non-goal for v2.x; optional Polars backend later | — |
-
-### Root causes the roadmap targets
-
-| Root cause from research | How the roadmap addresses it |
+| Do not build | Use or integrate instead |
 | --- | --- |
-| Data meaning is not fully specified | `ColumnSpec` / `DataContract` with semantic roles (`id`, `measure`, `category`, `datetime`) |
-| Sources evolve independently | Drift report at `transform()` with an explicit `on_drift` policy |
-| Quality rules are incomplete/disconnected | Reusable expectation checks + validation report, stored next to the cleaner |
-| Transformations separated from justification | `CleaningDecision` records with reasons, exported in the artifact |
-| Responsibility unclear | Contract as a reviewable, version-controlled file (helps, does not fully solve) |
+| Another complete ML pipeline framework | scikit-learn |
+| An enormous transformation catalogue | Feature-engine |
+| A replacement for enterprise validation platforms | Great Expectations, Pandera |
+| A distributed compute engine | Dask |
+| Another high-performance dataframe engine | Polars, PyArrow |
+| A complete data-monitoring dashboard | Evidently, Monte Carlo, Soda |
+| An orchestration and scheduling framework | Airflow, Dagster, Prefect |
+| An enterprise governance or ownership system | Existing catalog/governance tools |
+| An auto-ML tool that chooses business rules | The user |
+
+Also out of scope: scheduling, alerting, incident routing, a data catalog, and
+automatic business-rule inference without user confirmation.
 
 ---
 
-## 3. Design principles
+## 2. Baseline inventory (`v2.9.0` + merged hardening)
 
-1. **Never break leak-safety.** Any new check must be computable at `fit()` or
-   be a pure function of the frame passed to `transform()`.
-2. **Warn by default, fail on request.** Drift and validation should not
-   silently destroy data or crash a pipeline unless configured with
-   `severity="error"` / `on_drift="raise"`.
-3. **Explain every action.** No magic. Each decision has `column`, `action`,
-   `reason`, `source`, `before`, `after`.
-4. **Dependency-light.** pandas + numpy + scikit-learn + joblib stay the core.
-   Optional extras (`polars`, `hypothesis`, `pyyaml`) go in dev/optional groups.
-5. **Backwards compatible.** Existing `CleanerConfig` / `DataCleaner` behavior
-   stays the default. New behavior is opt-in.
-6. **Pure functions for audits.** Join/validation/split audits take DataFrames in
-   and return reports; they never mutate and never fit anything.
+Having a capability is not the same as hardening it. This table separates the
+two.
 
----
-
-## 4. Milestones
-
-### Tier 1 — `v2.1.0`: Semantic contracts and drift guard
-
-*Targets pain #1, #7 and root cause 1–3.*
-
-Introduce the concept of an explicit column contract, inferred at `fit()` and
-checked at `transform()`.
-
-```python
-from data_cleaner import ColumnSpec, DataContract, CleanerConfig, DataCleaner
-
-contract = DataContract(
-    columns=[
-        ColumnSpec("customer_id", role="id", preserve_leading_zeros=True),
-        ColumnSpec("age", role="numeric", nullable=True, min_value=0, max_value=120),
-        ColumnSpec("signup_date", role="datetime", date_format="%Y-%m-%d"),
-        ColumnSpec("plan", role="category", allowed_values=("free", "pro", "team")),
-    ],
-    on_drift="warn",  # raise | warn | coerce | ignore
-)
-
-cleaner = DataCleaner(CleanerConfig(contract=contract)).fit(X_train)
-X_test_clean = cleaner.transform(X_test)  # drift checked, never mutates
-report = cleaner.drift_report()  # DataFrame of every difference found
-```
-
-Deliverables:
-
-- `ColumnSpec` with `role`, `dtype`, `nullable`, `unique`, `allowed_values`,
-  `min_value`, `max_value`, `pattern`, `date_format`,
-  `preserve_leading_zeros`, `severity`.
-- Semantic roles: `id`, `numeric`/`measure`, `category`, `boolean`,
-  `datetime`, `text`, `ignore`.
-- `DataContract` with `infer_from(frame)`, `validate(frame)`, `diff(frame)`,
-  `to_yaml()` / `from_yaml()`.
-- Drift report covering: missing columns, extra columns, dtype change,
-  nullability change, new categories, range change, uniqueness change.
-- Identifier protection: `role="id"` columns are never coerced to numeric and
-  never imputed with a statistic.
-- `ClearnerConfig.on_drift` policy honored in `transform()`.
-
-Why first: it is the clearest unmet need in the research, it is the natural
-extension of what `DataCleaner` already learns, and it is a prerequisite for
-trustworthy validation and ML audits.
-
-### Tier 2 — `v2.3.0`: Auditable decisions and reproducible artifacts
-
-*Targets pain #8, #5, #6 and root cause 4.*
-
-```python
-cleaner.decision_log()  # DataFrame: column, action, reason, source, before, after
-cleaner.to_manifest()  # JSON-serializable dict
-cleaner.fingerprint(X)  # stable hash of schema + stats
-manifest = cleaner.artifact_manifest()
-```
-
-Deliverables:
-
-- `CleaningDecision` dataclass, recorded during `fit()` and manual overrides.
-- `DataCleaner.decision_log()` returning a tidy DataFrame.
-- Artifact manifest: library version, artifact version, pandas/numpy/sklearn
-  versions, config, contract, input schema, optional data fingerprint,
-  fitted param summary, UTC timestamp.
-- `fingerprint_dataframe(frame, columns=None)` — stable hash for lineage.
-- `compare_fingerprints(a, b)` and `assert_schema_stable`.
-- `DataCleaner.load()` warns when artifact is from a different schema/version.
-
-Why second: reproducibility is the other high-confidence, high-fit problem, and
-it makes the Tier 1 drift reports trustworthy over time.
-
-### Tier 3 — `v2.4.0`: Validation and integration diagnostics
-
-*Targets pain #2, #3.*
-
-```python
-from data_cleaner import diagnose_join, check_referential_integrity
-
-report = diagnose_join(orders, customers, on="customer_id", how="left")
-report.safe  # False
-report.row_multiplier  # 3.7
-report.unmatched_right  # 412
-report.warnings  # ["right key is not unique (m:m join)"]
-
-from data_cleaner import Contract
-
-result = Contract.from_frame(orders).validate(orders_new)
-result.failures.to_markdown()
-```
-
-Deliverables (pure functions, no fitting):
-
-- `diagnose_join(left, right, on, how, validate="1:1")` with left/right key
-  duplication, cardinality class, output row multiplier, unmatched counts.
-- `check_referential_integrity(child, parent, child_key, parent_key)`.
-- `deduplicate_by_business_key(frame, key, keep, tie_breaker=None)` that reports
-  what it removed and why — unlike raw `drop_duplicates`.
-- Lightweight expectations API: `not_null`, `unique`, `in_set`, `between`,
-  `matches_pattern`, `has_dtype`, `row_count_between`.
-- `ValidationReport` with `success`, `results`, `failures`, `to_markdown()`,
-  `raise_if_failed()`.
-
-Why here: these problems are severe but mostly *diagnostic*, so pure helper
-functions deliver most of the value without changing the transformer core.
-
-### Tier 4 — `v2.5.0`: ML validity audit
-
-*Targets pain #4.*
-
-```python
-audit = audit_split(
-    X_train,
-    X_test,
-    y_train,
-    y_test,
-    groups=groups,
-    time_col="event_time",
-    id_cols=["customer_id"],
-)
-audit.summary()  # DataFrame of findings + severity
-audit.raise_if_invalid()  # optional
-```
-
-Deliverables:
-
-- Duplicate / near-duplicate rows across splits.
-- Group leakage (same group in train and test).
-- Temporal leakage (train timestamps after test timestamps).
-- Target-leakage heuristics (single feature predicts target unusually well).
-- Constant / near-constant columns and high-cardinality identifiers.
-- Missingness and distribution shift between splits.
-- Severity per finding; never auto-fixes, only reports and explains.
-
-Why fourth: high severity for ML users, but it is an audit on top of the
-cleaner rather than part of it. Safer to ship after the contract/drift core is
-solid.
-
-### Tier 5 — `v2.6.0`: Safe ingestion
-
-*Targets pain #1, #5, #9 (partially).*
-
-```python
-frame, report = read_csv_safe("export.csv", contract=contract, on_error="warn")
-```
-
-Deliverables:
-
-- Read as strings first, then coerce under contract control.
-- Detect and preserve leading zeros, mixed types, thousands separators,
-  currency/percent symbols, and ambiguous date formats.
-- Emit an ingestion report instead of silently inferring types.
-- Guard against common spreadsheet failure modes (dates serialized as integers,
-  IDs losing leading zeros, booleans inferred from `Y`/`N`).
-
-Why fifth: it is a natural front door, but it is closer to a new I/O layer than
-to the existing transformer, so it should not gate the core value.
-
-### Tier 6 — shipped in `v2.7.0`: Reporting, docs, DX
-
-- `CleanerReport` combining profile + contract + decisions + drift.
-- `python -m data_cleaner audit data.csv` CLI for the above.
-- Notebook chapter per tier; docs site later.
-- `docs/adr/` architecture decision records.
-
-### Tier 7 — shipped in `v2.8.0`: Spreadsheet input
-
-*Targets pain #5 and finishes the ingestion front door.*
-
-```python
-from data_cleaner import read_excel_safe
-
-frame, report = read_excel_safe(
-    "export.xlsx",
-    contract=contract,
-    sheet_name="Orders",
-    on_error="warn",
-)
-report.sheet  # "Orders"
-```
-
-Deliverables:
-
-- `read_excel_safe()` on the existing `IngestionReport` model.
-- Worksheet selection by name or index, with the resolved sheet recorded.
-- The same identifier, date, numeric, and boolean guards as CSV input.
-- A `numeric_identifier` warning when a contract ID column is stored as numbers
-  and has already lost its leading zeros.
-- `CleanerReport.from_excel()` and `--sheet` support in the `audit` CLI.
-- An optional `excel` extra (`openpyxl`) so the core install stays lean.
-
-### Tier 8 — shipped in `v2.9.0`: Reliability hardening
-
-*Consolidates the existing surface instead of adding primitives.*
-
-Six focused modules, each shipped with tests, docs, and a changelog entry:
-
-1. **Contract enforcement at `fit()`** — validate explicit contracts before
-   learning and fail fast when a required training column is missing.
-   `ColumnSpec(required=False)` marks optional columns. *Shipped.*
-2. **Scalable join diagnostics** — compute key frequencies instead of expanding
-   many-to-many joins. *Shipped.*
-3. **Artifact compatibility enforcement** — raise on incompatible artifacts with
-   a documented opt-out, and document the pickle trust boundary. *Shipped.*
-4. **Explicit outlier clipping** — make outlier capping opt-in and per-column,
-   and record every clipping decision. *Shipped.*
-5. **Memory-aware CSV ingestion** — add chunked reading, reduce copies, and warn
-   when large identifiers lose precision. *Shipped.*
-6. **Public API review** — mark stable and experimental surfaces and document the
-   deprecation policy. *Shipped.*
-
-Why now: the transformer, contracts, ingestion, diagnostics, and reporting cover
-the intended workflow. The next gain comes from making those paths dependable and
-predictable, not from adding another feature.
-
----
-
-## 5. Package structure
-
-**Package shipped in `v2.2.0`; audit modules added in `v2.3.0`; validation and
-integration modules added in `v2.4.0`; the ML split audit was added in
-`v2.5.0`; safe CSV ingestion was added in `v2.6.0`; batch reporting and the
-`audit` CLI were added in `v2.7.0`; Excel ingestion was added in `v2.8.0`; reliability hardening shipped in
-`v2.9.0`.**
-The single `data_cleaner.py` module was split into a typed `src/data_cleaner/`
-package with a PEP 561 `py.typed` marker, while keeping the public import path
-and the pickled-artifact qualified name stable.
-
-```text
-src/data_cleaner/
-├── __init__.py        # public API re-exports (stable import path)
-├── __main__.py        # `python -m data_cleaner audit` CLI
-├── _version.py        # __version__, artifact version
-├── _roles.py          # semantic roles, dtype/identifier helpers
-├── artifacts.py       # fingerprints and runtime version metadata
-├── contract.py        # ColumnSpec, DataContract, DriftReport
-├── config.py          # CleanerConfig
-├── cleaner.py         # DataCleaner
-├── decisions.py       # CleaningDecision, decision log
-├── ingestion.py       # read_csv_safe, read_excel_safe, IngestionReport
-├── integration.py     # join diagnostics, referential integrity, dedup
-├── ml_audit.py        # audit_split, SplitAudit
-├── profiling.py       # profile_dataframe, dataset_summary, helpers
-├── reporting.py       # CleanerReport
-└── validation.py      # expectations, ValidationReport
-```
-
-Tier 6 shipped the reporting and developer-experience layer rather than a new
-data primitive. Tier 7 completed the ingestion front door with Excel input on
-the existing `IngestionReport` model. Future work focuses on documentation depth,
-notebook chapters, architecture decision records, and continued compatibility
-rather than new core data primitives.
-
-Compatibility rules:
-
-- `import data_cleaner; data_cleaner.DataCleaner` keeps working.
-- Existing pickled artifacts reference `data_cleaner.DataCleaner`. That
-  qualified name stays stable, and a fixture test loads an artifact saved under
-  the legacy flat-module layout after the restructure.
-- The restructure stayed in the 2.x line because no public import path moved.
-
----
-
-## 6. Testing strategy
-
-- **Invariant tests**: no input mutation, no inference-row loss, fit-only-from-
-  train, idempotent `transform`.
-- **Drift matrix**: for each contract field, construct a frame that violates it
-  and assert the exact report entry and policy behavior.
-- **Artifact compatibility**: an artifact pickled under the legacy flat-module
-  layout is loaded after the package restructure. The test remaps the classes'
-  module names at runtime, so it is pandas-version independent and safe across
-  the whole CI matrix.
-- **Pure-function correctness**: compare `diagnose_join` against hand-computed
-  pandas cardinalities on 1:1, 1:m, m:m, empty, and all-unmatched cases.
-- **Split audit matrix**: for each leakage or shift check, construct a
-  contaminated split and assert the exact finding severity and column, plus a
-  clean split with no findings and an input-mutation test.
-- **Property-based tests** (optional `hypothesis` dev dep) for dedup and
-  fingerprint stability.
-- **Golden notebook**: keep executing `Universal_Data_Cleaner.ipynb` headlessly
-  in CI, extended with the new features.
-
----
-
-## 7. Release and versioning plan
-
-| Version | Scope | Breaking? |
+| Capability | Current state | Remaining gap |
 | --- | --- | --- |
-| `2.1.0` | Contracts + drift guard + id protection | No |
-| `2.2.0` | Typed `src/` package, `py.typed`, CI quality gates | No |
-| `2.3.0` | Decision log + manifest + fingerprints | No |
-| `2.4.0` | Validation + join/integration diagnostics | No |
-| `2.5.0` | ML split/leakage audit | No |
-| `2.6.0` | Safe CSV ingestion | No |
-| `2.7.0` | Batch report + `audit` CLI | No |
-| `2.8.0` | Excel ingestion on the same report model | No |
-| `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, and ingestion | No |
-| `3.0.0` | Any future breaking import move | Possibly |
+| CSV ingestion | Implemented | Performance and adversarial edge cases |
+| Excel ingestion | Implemented | Large-workbook handling |
+| Chunked CSV reading | Implemented | Bounded-memory unique tracking, aggregated reports |
+| Type inference | Implemented | Ambiguity and precision policies |
+| Identifier protection | Implemented | Broader numeric precision safeguards |
+| Missing-value handling | Implemented | Specialized policies where justified |
+| Outlier handling | Implemented | Additional carefully selected methods |
+| Categorical cleaning | Implemented | Encoding integration depth |
+| Datetime handling | Implemented | Timezone and DST edge-case validation |
+| Data contracts | Implemented | Contract evolution and migrations |
+| Schema drift | Implemented | Statistical distribution drift |
+| Train/test leakage audit | Implemented | Broader adversarial validation |
+| Join diagnostics | Implemented | Performance stress testing |
+| Referential integrity | Implemented | More complex relationship checks |
+| Deduplication | Implemented | Large-scale deduplication |
+| Data validation | Implemented | Custom, conditional, and cross-column checks |
+| Decision logging | Implemented | Batch-level historical tracking |
+| Cleaning reports | Implemented | Report sinks and monitoring integrations |
+| Artifact manifests | Implemented | Runtime dependency compatibility policy |
+| Fingerprinting | Implemented | Exact content-integrity fingerprints |
+| scikit-learn integration | Implemented | Full estimator compatibility testing |
+| CLI | Implemented | Operational integration |
+| CI and wheel tests | Implemented | Stress, property, fuzz, and security gates |
+| Release provenance | Workflow added | Post-publication verification of a real release |
 
-Each release: update `CHANGELOG.md`, bump `pyproject.toml`, push, create a
-GitHub release, let `publish.yml` handle PyPI.
+Merged but unreleased hardening on `main`:
+
+- `iter_csv_safe()` infers the schema once and reuses it for later chunks.
+- Safe ingestion enforces `ColumnSpec(unique=True)`, including across chunks.
+- Missing fitted columns are always fatal, with matching documentation.
+- Contract uniqueness ignores nulls consistently.
+- CI tests minimum, latest, and pandas 3.x dependencies.
+- CI installs and exercises the built wheel.
+- Release builds generate PEP 740 and GitHub provenance attestations.
 
 ---
 
-## 8. Non-goals (explicit)
+## 3. Maturity model
 
-- Scheduling, orchestration, alerting, incident routing.
-- A data catalog or ownership/governance system.
-- Automatic business-rule inference without user confirmation.
-- Replacing Great Expectations / Soda / dbt / OpenRefine.
-- Heavy ML or NLP dependencies in the core install.
+### Level 1 — Reliable pandas library
+
+**Reached by `v2.9.0`.** Cleaning, contracts, ingestion, validation, reporting,
+reproducibility, and CI are in place and documented.
+
+### Level 2 — Production-hardened library
+
+**Next target.** Requires concurrency safety, numeric precision guarantees,
+bounded memory, artifact reliability, performance evidence, stronger validation,
+statistical drift, and verified releases.
+
+### Level 3 — Ecosystem first choice
+
+**Long-term.** Requires proven performance, stable APIs, integrations, external
+users, trusted releases, reviewed examples, and multiple maintainers.
+
+**Decision:** target Level 2 before adding any new data primitive.
 
 ---
 
-## 9. Current step
+## 4. Definition of done
 
-Tier 1 (`v2.1.0`), the typed package restructure (`v2.2.0`), Tier 2
-(`v2.3.0`: decision log, manifest, fingerprints), Tier 3 (`v2.4.0`:
-expectations, contract validation, join diagnostics, referential integrity, and
-audited deduplication), Tier 4 (`v2.5.0`: `audit_split()` with duplicate and
-near-duplicate overlap, group leakage, temporal leakage, target-leakage
-heuristics, constant/high-cardinality columns, distribution shift, target shift,
-and severity-tagged findings), Tier 5 (`v2.6.0`: `read_csv_safe()` with
-contract-driven coercion, identifier/date/boolean guards, and an
-`IngestionReport`), Tier 6 (`v2.7.0`: `CleanerReport` combining profile,
-contract, decisions, validation, and drift, plus the
-`python -m data_cleaner audit` command), and Tier 7 (`v2.8.0`:
-`read_excel_safe()`, worksheet selection, `CleanerReport.from_excel()`, Excel CLI
-input, and the `numeric_identifier` guard) are shipped.
+This is the standard the library is measured against. A row is only "done" when
+the named evidence exists in the repository and in a verified release.
 
-The latest milestone, `v2.9.0`, is a reliability pass over the existing surface:
-contract enforcement at `fit()` (including `ColumnSpec(required=False)`),
-scalable join diagnostics, enforced artifact compatibility, explicit outlier
-clipping, memory-aware CSV ingestion, and a documented public API surface. All
-six modules are shipped.
+| Standard | Definition of done | Proven by |
+| --- | --- | --- |
+| Correctness | No silent data corruption or unintended row loss | Invariant tests on every release |
+| Input safety | Malformed inputs produce controlled, understandable failures | Adversarial/fuzz suites |
+| Data contracts | Schema changes are explicitly detected and handled | Drift matrix tests |
+| Transformations | Identical learned rules across training and inference | Leak-safety tests |
+| Numerical safety | Precision loss is detected and handled by policy | Boundary-value tests around `2^53` |
+| Performance | Workload limits are documented and benchmarked | Benchmark suite and docs |
+| Memory | Processing behavior is predictable and tested | Peak-RAM benchmarks |
+| Concurrency | Parallel batch operations produce independent results | Concurrent transform tests |
+| Reproducibility | Transformations and environments can be inspected and verified | Manifest, fingerprints, artifact tests |
+| Serialization | Atomic writes, compatibility policy, trust boundaries | Corruption/interrupt tests |
+| Validation | Clear, extensible, reusable quality rules | Validation protocol tests |
+| Monitoring | Reports can be retained and integrated externally | Report-sink tests |
+| Testing | Adversarial, integration, property, compatibility tests | CI matrix |
+| Security | Dependencies, builds, published artifacts verifiable | Audit + post-publish verification |
+| DX | Stable, documented, intuitive APIs | API docs and deprecation policy |
+| Maintenance | Release policy, deprecation strategy, contributions | Maintainer docs |
 
-The remaining work is documentation depth, notebook chapters, and architecture
-decision records rather than new core data primitives.
+---
+
+## 5. Version plan
+
+Each version is a release train. Scope is frozen at the start; items move to the
+next train rather than expanding the current one.
+
+| Version | Theme | Backlog | Breaking? |
+| --- | --- | --- | --- |
+| `2.9.1` | Ship merged hardening; prove provenance | PR #38 fixes + first attested release | No |
+| `2.10.0` | Production correctness | Phase 1 | No (new APIs opt-in) |
+| `2.11.0` | Large data and performance | Phase 2 | No |
+| `2.12.0` | Validation and statistical drift | Phase 3 | No |
+| `2.13.0` | Reproducibility and operations | Phase 4 | No |
+| `2.14.0` | Testing and security | Phase 5 | No |
+| `3.0.0` | Ecosystem readiness | Phase 6 | Possibly |
+
+If Phase 1 slips, split it into `2.10.0` and `2.10.1`. **Do not pull Phase 2
+forward to hide incomplete correctness work.**
+
+### `2.9.1` — Merged hardening and provenance proof
+
+Ship what is already merged, then verify the release pipeline end to end.
+
+Deliverables:
+
+- [ ] Release the chunked-schema, uniqueness, missing-column, CI-matrix, and
+      installed-wheel changes already on `main`.
+- [ ] Confirm PyPI shows provenance for both the wheel and the sdist.
+- [ ] Record the post-publication verification result in this roadmap.
+- [ ] Clean-install `2.9.1` from PyPI in a fresh environment and run the CLI.
+
+Why first: `2.9.0` predates the attestation workflow, so PyPI correctly shows
+**no provenance** for it. Verified on 2026-11-11: the PyPI Integrity API returns
+`404` for both the wheel and the sdist. This is expected, not a broken signature.
+The first release that can prove provenance is `2.9.1`; treat it as the
+release-gate rehearsal before the larger `2.10.0`.
+
+### `2.10.0` — Production correctness
+
+Exit criteria:
+
+- [ ] All Phase 1 items complete.
+- [ ] Concurrent `transform()` calls return independent reports.
+- [ ] Numeric precision and infinity/NaN policies tested at boundaries.
+- [ ] Artifact writes are atomic and dependency compatibility is enforced.
+- [ ] Chunked uniqueness tracking has a bounded/disk-backed mode.
+- [ ] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
+- [ ] Post-publication provenance verification passes.
+
+### `2.11.0` — Large data and performance
+
+Exit criteria:
+
+- [ ] A reproducible benchmark suite covers 100K, 1M, and larger datasets.
+- [ ] Peak RAM is measured separately from runtime.
+- [ ] Ingestion, fit, transform, reporting, and validation are benchmarked
+      separately.
+- [ ] A supported chunked transformation workflow and report aggregation exist.
+- [ ] A documented supported workload is derived from measurements.
+- [ ] No performance claim appears without benchmark evidence.
+
+### `2.12.0` — Validation and statistical drift
+
+Exit criteria:
+
+- [ ] A custom validation protocol supports cross-column, conditional, and
+      grouped rules.
+- [ ] Reference-versus-current distribution comparison ships with PSI,
+      Wasserstein distance, missingness deltas, and category deltas.
+- [ ] Drift policies and thresholds are documented and reproducible.
+- [ ] Failing-row diagnostics are bounded and privacy-safe.
+- [ ] Historical batch comparison is available through a report sink.
+
+### `2.13.0` — Reproducibility and operations
+
+Exit criteria:
+
+- [ ] Contracts have explicit versions and documented migration rules.
+- [ ] An exact content-integrity fingerprint complements the summary fingerprint.
+- [ ] Artifact integrity and runtime compatibility policies are verified.
+- [ ] Structured logging and stable error categories exist.
+- [ ] A report-sink interface ships with a JSON Lines implementation.
+- [ ] Serving and scheduled batch-processing guidance is documented.
+
+### `2.14.0` — Testing and security
+
+Exit criteria:
+
+- [ ] Property-based and fuzz tests cover malformed and adversarial input.
+- [ ] Duplicate columns/indexes, unusual dtypes, timezones, and DST cases pass.
+- [ ] Serialization corruption and interrupted-write tests pass.
+- [ ] scikit-learn estimator checks pass or document deliberate differences.
+- [ ] Cross-platform CI covers every claimed platform.
+- [ ] Dependency audit and supply-chain review run in CI.
+
+### `3.0.0` — Ecosystem readiness
+
+Only when the work requires a breaking change. Requires:
+
+- [ ] Stable public API and migration guides between releases.
+- [ ] Independently reviewed example pipelines and benchmark datasets.
+- [ ] Production case studies from real users.
+- [ ] More than one active maintainer.
+- [ ] A clear release, support, and deprecation policy.
+
+---
+
+## 6. Master backlog
+
+Status legend: `[ ]` not started · `[~]` partially done · `[x]` done.
+
+### Phase 1 — Production correctness (P0/P1)
+
+**Execution tracker: in progress.** Several workstreams are partially
+addressed; the checkboxes below are authoritative.
+
+#### 1. Verify actual PyPI provenance
+
+- [x] Add PEP 740 and GitHub provenance generation to the release workflow.
+- [ ] Verify the published wheel and sdist attestations.
+- [ ] Add post-publication verification as a release gate, not just a local file
+      existence check.
+- [ ] Verify GitHub build provenance against the repository and release artifact.
+
+`v2.9.0` has no provenance because it was published before the workflow existed.
+Verified on 2026-11-11 via the PyPI Integrity API (`404` for both artifacts).
+Do not claim otherwise; prove it on `2.9.1`.
+
+#### 2. Make transformation reporting concurrency-safe
+
+- [ ] Introduce a request-specific transformation result that returns the output
+      frame and its drift report together.
+- [ ] Eliminate reliance on the shared last-transform drift state for batch
+      findings.
+- [ ] Keep `transform()` backward compatible and document the concurrency
+      contract.
+- [ ] Add concurrent execution tests.
+
+Target shape (name to be finalized in an ADR):
+
+```python
+cleaned, report = cleaner.transform_with_report(X_batch)
+```
+
+`drift_report()` remains available for the last call, but it is explicitly
+documented as per-instance state, not a concurrency-safe batch result.
+
+#### 3. Harden numerical correctness
+
+- [ ] Detect precision loss in numeric conversions.
+- [ ] Preserve integer and nullable integer dtypes where possible.
+- [ ] Add explicit `raise`, `warn`, and `coerce` precision policies.
+- [ ] Test infinity, NaN, very large integers, and boundary values around `2^53`.
+
+#### 4. Harden artifact persistence
+
+- [x] Enforce artifact format and library-major compatibility.
+- [ ] Implement atomic artifact writes: temp file, validation, `os.replace`,
+      cleanup after failure.
+- [ ] Enforce compatibility with the recorded runtime dependency environment.
+- [ ] Define and document the compatibility policy.
+- [ ] Test corruption, truncation, and interrupted writes.
+- [ ] Keep the pickle trust boundary explicit; evaluate `skops.io` for untrusted
+      artifacts.
+
+#### 5. Harden chunked ingestion
+
+- [x] Infer the schema once and reuse it across chunks.
+- [x] Check `ColumnSpec(unique=True)` within and across chunks.
+- [ ] Bound memory used by cross-chunk uniqueness tracking.
+- [ ] Add disk-backed tracking for high-cardinality identifiers.
+- [ ] Aggregate chunk reports correctly.
+- [ ] Define supported streaming semantics and their limits.
+
+### Phase 2 — Large-data and performance engineering (P1/P2)
+
+- [ ] Build a proper benchmark suite.
+- [ ] Benchmark 100K, 1M, and larger realistic datasets.
+- [ ] Test narrow and extremely wide DataFrames.
+- [ ] Test high-cardinality categorical and identifier columns.
+- [ ] Measure peak RAM, not just execution time.
+- [ ] Benchmark ingestion, fit, transform, reporting, and validation separately.
+- [ ] Identify unnecessary DataFrame copies.
+- [ ] Add chunked transformation and aggregated reporting.
+- [ ] Define a documented supported workload based on measured results.
+- [ ] Add optional Parquet ingestion using PyArrow.
+
+Do not publish speed claims until the benchmark results support them.
+Do not add `partial_fit()` by averaging chunk statistics. Exact medians and
+quantiles require a statistically correct global algorithm.
+
+### Phase 3 — Validation and quality engineering (P2)
+
+- [ ] Custom validation protocol.
+- [ ] Cross-column expectations.
+- [ ] Conditional rules.
+- [ ] Grouped validations.
+- [ ] Statistical distribution drift (PSI, Wasserstein, missingness, categories).
+- [ ] Reference-data comparisons.
+- [ ] Row-level diagnostics with bounded, privacy-safe sampling.
+- [ ] Historical batch comparison.
+- [ ] Optional integration with Pandera and Evidently.
+
+This remains an extensible validation layer, not a Pandera replacement.
+
+### Phase 4 — Reproducibility and operational integration (P2)
+
+- [ ] Explicit contract versions and migration rules.
+- [ ] Exact content fingerprints.
+- [ ] Artifact integrity verification.
+- [ ] Runtime compatibility policies (completed in Phase 1 where applicable).
+- [ ] Atomic artifact persistence (completed in Phase 1 where applicable).
+- [ ] Aggregated batch reports.
+- [ ] Report-sink interface with JSON Lines as the reference implementation.
+- [ ] Structured logging and stable error categories.
+- [ ] Optional metrics integration.
+- [ ] Serving and scheduled batch-processing documentation.
+
+### Phase 5 — Testing and security hardening (P1/P2)
+
+- [ ] Property-based testing with Hypothesis.
+- [ ] Fuzz testing malformed and adversarial CSV inputs.
+- [ ] Duplicate columns, duplicate indexes, and unusual pandas dtypes.
+- [ ] Timezone, daylight-saving, and ambiguous datetime tests.
+- [ ] Serialization compatibility and corruption tests.
+- [ ] scikit-learn `check_estimator()` / `parametrize_with_checks()`.
+- [ ] Cross-platform CI where support is claimed.
+- [ ] Security scanning with tools such as `pip-audit`.
+- [ ] GitHub Actions dependency pinning and supply-chain review.
+- [ ] Test coverage reporting for critical modules.
+
+### Phase 6 — Ecosystem readiness (P3)
+
+- [ ] Stable public API and deprecation policy (largely in place).
+- [ ] Migration guides between releases.
+- [ ] Compatibility documentation.
+- [ ] Independently reviewed example pipelines.
+- [ ] External contributor reviews.
+- [ ] Real-world benchmark datasets.
+- [ ] Production case studies.
+- [ ] More than one active maintainer.
+- [ ] Clear release and support policies.
+
+---
+
+## 7. Release gates
+
+Every release must pass these gates. A release is not "done" when the tag is
+created; it is done when the published artifacts are verified.
+
+### Before opening the release PR
+
+- [ ] Scope matches the version in this roadmap.
+- [ ] Every behavior change has tests, including failure and boundary cases.
+- [ ] Performance work has benchmark evidence; no unsupported claims.
+- [ ] Public API changes have an ADR and a migration note.
+- [ ] Documentation matches behavior.
+
+### Local quality gate
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run pytest
+uv build
+uv run --group docs mkdocs build --strict
+```
+
+Plus, where applicable:
+
+- pandas 3.x suite;
+- minimum-dependency suite;
+- installed-wheel smoke test;
+- concurrency, property, fuzz, and security checks.
+
+### Before publishing
+
+- [ ] `CHANGELOG.md` updated and version bumped.
+- [ ] Distributions inspected.
+- [ ] Release notes reviewed.
+- [ ] Explicit maintainer approval.
+- [ ] Provenance files present for every artifact.
+
+### After publishing (required)
+
+- [ ] Verify PyPI attestations for the wheel and sdist.
+- [ ] Verify GitHub build provenance against this repository.
+- [ ] Clean-install from PyPI in a fresh environment.
+- [ ] Run `data-cleaner --version`, import checks, and a small workflow.
+- [ ] Record the result in the release notes and this roadmap.
+- [ ] Close the version's tracking issue.
+
+Verification commands:
+
+```bash
+uvx "pypi-attestations==0.0.31" verify pypi \
+  --repository https://github.com/devlprkhan/universal-data-cleaner \
+  pypi:universal_data_cleaner-<version>-py3-none-any.whl
+
+gh attestation verify universal_data_cleaner-<version>-py3-none-any.whl \
+  --repo devlprkhan/universal-data-cleaner
+```
+
+---
+
+## 8. How versions are executed
+
+This is the operating loop for every version. No release skips a step.
+
+1. **Open a tracking issue** from the version section and copy its checklist.
+2. **Freeze scope.** Anything new goes to the next version.
+3. **Write an ADR** for public API or behavior changes.
+4. **Implement** one backlog item at a time, with tests.
+5. **Prove it** with benchmarks, concurrency tests, or adversarial input as the
+   item requires.
+6. **Update docs and changelog** in the same PR.
+7. **Run the full gate** locally and in CI.
+8. **Merge only when green**, then prepare the release.
+9. **Publish only with explicit approval**, then run the post-publish gate.
+10. **Record the result** and close the tracking issue.
+
+Rules:
+
+- Do not mix unrelated feature work into a hardening release.
+- Do not weaken a check to make a release pass; fix the cause.
+- Do not claim production readiness without evidence in the repository.
+- Keep the core dependency set light: pandas, NumPy, scikit-learn, joblib.
+  Optional capabilities belong in extras.
+
+---
+
+## 9. Engineering references
+
+Study these for their engineering standard; do not copy their scope.
+
+| Project | What to learn from it | Use here as |
+| --- | --- | --- |
+| Pandera | Rich, extensible schemas and lazy validation | Validation API reference |
+| Feature-engine | sklearn-compatible transformation design | Transformer conventions |
+| scikit-learn | Estimator checks, pipelines, composition | Compatibility target |
+| Great Expectations | Persistent results and checkpoints | Operational inspiration |
+| Evidently | Statistical drift and data-quality metrics | Drift methodology |
+| Polars | Lazy and streaming execution | Performance reference |
+| Dask | Larger-than-memory execution | Boundary reference |
+| skops.io | Safer model serialization | Artifact security option |
+
+Optional integrations are opt-in extras, never core dependencies.
+
+---
+
+## 10. Shipped history
+
+| Version | Theme | Status |
+| --- | --- | --- |
+| `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
+| `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
+| `2.7.0` | `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
+| `2.6.0` | Safe CSV ingestion with contract-driven coercion | Shipped |
+| `2.5.0` | Train/test split and leakage audit | Shipped |
+| `2.4.0` | Expectations, join diagnostics, integrity, and audited dedup | Shipped |
+| `2.3.0` | Decision log, manifest, and fingerprints | Shipped |
+| `2.2.0` | Typed `src/` package, `py.typed`, CI quality gates | Shipped |
+| `2.1.0` | Contracts, drift guard, and identifier protection | Shipped |
+
+See the [changelog](https://github.com/devlprkhan/universal-data-cleaner/blob/main/CHANGELOG.md) for details.
+
+---
+
+## 11. Current step
+
+**Next release: `2.9.1`** — ship the already-merged hardening and verify the new
+provenance gate against real PyPI artifacts.
+
+**Next development version: `2.10.0`** — Phase 1, production correctness.
+
+The strategic rule stands: **do not add another twenty cleaning capabilities.
+Prove that the capabilities already shipped behave reliably under demanding
+conditions.**
+
+The standard to meet:
+
+> A developer can feed Universal Data Cleaner an unfamiliar, messy tabular
+> dataset, explicitly define its expectations, process it safely, inspect every
+> important decision, reproduce the result, and confidently pass the cleaned
+> output into an ML pipeline.

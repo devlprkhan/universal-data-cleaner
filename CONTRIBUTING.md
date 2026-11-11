@@ -22,10 +22,29 @@ This project uses a standard branch → pull request → CI → merge flow.
 4. Commit with a conventional message, e.g. `feat: add X`, `fix: correct Y`,
    `docs: ...`, `chore: ...`.
 5. Push the branch and open a pull request.
-6. Wait for CI (`lint`, `typecheck`, `test`, `build`, `ci-success`) to pass.
+6. Wait for CI (`lint`, `typecheck`, `test`, `compat`, `build`,
+   `installed wheel`, `docs`, `ci-success`) to pass.
 7. Merge once the PR is green.
 
 Direct pushes to `main` are restricted; all changes go through a pull request.
+
+## Roadmap-driven releases
+
+The [roadmap](ROADMAP.md) is the working plan. Each release is scoped to one
+theme, with a frozen checklist and explicit exit criteria.
+[ADR 0001](docs/adr/0001-production-hardening-strategy.md) records the decision to
+harden existing behaviour before adding new data primitives.
+
+Before starting work:
+
+1. Pick the next item from the current version in the roadmap.
+2. Open or update the version tracking issue.
+3. Keep the pull request focused on the scoped item, its tests, and its
+   documentation.
+4. Add an ADR under `docs/adr/` when a change affects the public API, a
+   documented default, safety guarantees, serialization, or the release process.
+5. Do not pull work from a later phase into the current release to make it look
+   complete.
 
 ## Local setup
 
@@ -72,6 +91,7 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest
 uv build
+uv run --group docs mkdocs build --strict  # when docs change
 ```
 
 Please keep changes focused and include tests for new cleaning behavior.

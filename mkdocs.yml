@@ -117,6 +117,11 @@ nav:
       - API reference: api.md
       - Artifacts & reproducibility: artifacts.md
       - Changelog: changelog.md
+  - Project:
+      - Roadmap: roadmap.md
       - Upcoming: upcoming.md
+      - Decisions:
+          - ADR index: adr/index.md
+          - Production hardening strategy: adr/0001-production-hardening-strategy.md
   - PyPI: https://pypi.org/project/universal-data-cleaner/
   - GitHub: https://github.com/devlprkhan/universal-data-cleaner
