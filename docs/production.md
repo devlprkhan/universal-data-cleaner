@@ -242,15 +242,24 @@ the source repository:
 ```bash
 uvx "pypi-attestations==0.0.31" verify pypi \
   --repository https://github.com/devlprkhan/universal-data-cleaner \
-  pypi:universal_data_cleaner-2.9.0-py3-none-any.whl
+  pypi:universal_data_cleaner-<version>-py3-none-any.whl
 ```
 
 GitHub also stores a build-provenance attestation for the same artifacts under
 the repository's **Attestations** tab. Check it with the GitHub CLI:
 
 ```bash
-gh attestation verify universal_data_cleaner-2.9.0-py3-none-any.whl \
+gh attestation verify universal_data_cleaner-<version>-py3-none-any.whl \
   --repo devlprkhan/universal-data-cleaner
+```
+
+Repeat both commands for the `.tar.gz` source distribution. Then confirm a clean
+install from PyPI works:
+
+```bash
+uv venv /tmp/udc-check
+uv pip install --python /tmp/udc-check/bin/python universal-data-cleaner==<version>
+/tmp/udc-check/bin/data-cleaner --version
 ```
 
 Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored in
@@ -258,7 +267,7 @@ the repository. The workflow refuses to publish if the `.publish.attestation`
 files are missing.
 
 Run these checks after every publication. `2.9.0` predates the attestation
-workflow, so its artifacts have no provenance; the next release is the first that
+workflow, so its artifacts have no provenance; `2.9.1` is the first release that
 can be verified.
 
 ## Related guides
