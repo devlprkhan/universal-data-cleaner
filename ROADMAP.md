@@ -1,9 +1,7 @@
 # Universal Data Cleaner — Production Roadmap
 
-> **Baseline:** `v2.9.0` (published 2026-11-10) plus the post-release hardening
-> already merged to `main` (PR #38).
-> **Current target:** `v2.9.1` — ship the merged fixes and prove the new release
-> provenance gate. **Then:** `v2.10.0` — production correctness.
+> **Baseline:** `v2.9.1` (published and provenance-verified 2026-11-11).
+> **Current target:** `v2.10.0` — production correctness (Phase 1).
 >
 > This roadmap is the working plan. Every version below is a scoped, tested,
 > documented, and verified release — not a wish list.
@@ -63,7 +61,7 @@ automatic business-rule inference without user confirmation.
 
 ---
 
-## 2. Baseline inventory (`v2.9.0` + merged hardening)
+## 2. Baseline inventory (`v2.9.1`)
 
 Having a capability is not the same as hardening it. This table separates the
 two.
@@ -93,9 +91,9 @@ two.
 | scikit-learn integration | Implemented | Full estimator compatibility testing |
 | CLI | Implemented | Operational integration |
 | CI and wheel tests | Implemented | Stress, property, fuzz, and security gates |
-| Release provenance | Workflow added | Post-publication verification of a real release |
+| Release provenance | Verified in `2.9.1` | Automated post-publication verification |
 
-Merged but unreleased hardening on `main`:
+Shipped in `2.9.1` (previously merged to `main`):
 
 - `iter_csv_safe()` infers the schema once and reuses it for later chunks.
 - Safe ingestion enforces `ColumnSpec(unique=True)`, including across chunks.
@@ -112,7 +110,8 @@ Merged but unreleased hardening on `main`:
 ### Level 1 — Reliable pandas library
 
 **Reached by `v2.9.0`.** Cleaning, contracts, ingestion, validation, reporting,
-reproducibility, and CI are in place and documented.
+reproducibility, and CI are in place and documented. `v2.9.1` hardens the
+ingestion and release paths on top of that foundation.
 
 ### Level 2 — Production-hardened library
 
@@ -180,17 +179,31 @@ Ship what is already merged, then verify the release pipeline end to end.
 Deliverables:
 
 - [x] Version bump, changelog, and release documentation prepared for `2.9.1`.
-- [ ] Release the chunked-schema, uniqueness, missing-column, CI-matrix, and
+- [x] Release the chunked-schema, uniqueness, missing-column, CI-matrix, and
       installed-wheel changes already on `main`.
-- [ ] Confirm PyPI shows provenance for both the wheel and the sdist.
-- [ ] Record the post-publication verification result in this roadmap.
-- [ ] Clean-install `2.9.1` from PyPI in a fresh environment and run the CLI.
+- [x] Confirm PyPI shows provenance for both the wheel and the sdist.
+- [x] Record the post-publication verification result in this roadmap.
+- [x] Clean-install `2.9.1` from PyPI in a fresh environment and run the CLI.
+
+Post-publication verification (2026-11-11, release [v2.9.1](https://github.com/devlprkhan/universal-data-cleaner/releases/tag/v2.9.1),
+published from `main` at `aab2070`):
+
+| Check | Result |
+| --- | --- |
+| PyPI artifacts | wheel `sha256:d02a1fb2…`, sdist `sha256:f7c50cb1…` |
+| PyPI Integrity API (wheel) | Provenance present; publisher `GitHub / devlprkhan/universal-data-cleaner`, workflow `publish.yml` |
+| PyPI Integrity API (sdist) | Provenance present; same publisher identity |
+| `gh attestation verify` (wheel) | Passed; signer `publish.yml@refs/tags/v2.9.1`, source commit `aab2070` |
+| `gh attestation verify` (sdist) | Passed; same builder identity |
+| Clean install from PyPI | Published wheel installed in a fresh virtual environment with pandas 3.0.6 |
+| `data-cleaner --version` | Reports `data-cleaner 2.9.1` |
+| Installed-wheel smoke test | Fit/transform preserved row count, did not mutate the input, and produced the missing indicators |
 
 Why first: `2.9.0` predates the attestation workflow, so PyPI correctly shows
 **no provenance** for it. Verified on 2026-11-11: the PyPI Integrity API returns
 `404` for both the wheel and the sdist. This is expected, not a broken signature.
-The first release that can prove provenance is `2.9.1`; treat it as the
-release-gate rehearsal before the larger `2.10.0`.
+`2.9.1` is the first release that proves provenance and closes the release-gate
+rehearsal before the larger `2.10.0`.
 
 ### `2.10.0` — Production correctness
 
@@ -274,14 +287,19 @@ addressed; the checkboxes below are authoritative.
 #### 1. Verify actual PyPI provenance
 
 - [x] Add PEP 740 and GitHub provenance generation to the release workflow.
-- [ ] Verify the published wheel and sdist attestations.
-- [ ] Add post-publication verification as a release gate, not just a local file
+- [x] Verify the published wheel and sdist attestations.
+- [x] Add post-publication verification as a release gate, not just a local file
       existence check.
-- [ ] Verify GitHub build provenance against the repository and release artifact.
+- [x] Verify GitHub build provenance against the repository and release artifact.
+
+Verified on `2.9.1` (2026-11-11): both artifacts carry provenance from
+`publish.yml@refs/tags/v2.9.1` at commit `aab2070`, and `gh attestation verify`
+passed for the wheel and sdist. Automating this check after publication remains
+open.
 
 `v2.9.0` has no provenance because it was published before the workflow existed.
 Verified on 2026-11-11 via the PyPI Integrity API (`404` for both artifacts).
-Do not claim otherwise; prove it on `2.9.1`.
+Do not claim otherwise; prove it on the next release.
 
 #### 2. Make transformation reporting concurrency-safe
 
@@ -510,6 +528,7 @@ Optional integrations are opt-in extras, never core dependencies.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.9.1` | Ship merged hardening; prove PyPI and GitHub provenance | Shipped |
 | `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
 | `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
 | `2.7.0` | `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
@@ -526,12 +545,12 @@ See the [changelog](https://github.com/devlprkhan/universal-data-cleaner/blob/ma
 
 ## 11. Current step
 
-**Next release: `2.9.1`** — ship the already-merged hardening and verify the new
-provenance gate against real PyPI artifacts. The release PR is in review;
-publishing requires explicit maintainer approval, and the post-publication
-verification is the final gate.
+**Current release: `2.9.1`** — shipped and provenance-verified on 2026-11-11. See
+the verification table in section 5.
 
-**Next development version: `2.10.0`** — Phase 1, production correctness.
+**Next release: `2.10.0`** — Phase 1, production correctness:
+concurrency-safe reporting, numeric precision policies, atomic artifact writes,
+dependency compatibility enforcement, and bounded chunk uniqueness tracking.
 
 The strategic rule stands: **do not add another twenty cleaning capabilities.
 Prove that the capabilities already shipped behave reliably under demanding

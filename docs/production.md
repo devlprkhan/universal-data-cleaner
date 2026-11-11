@@ -267,8 +267,8 @@ the repository. The workflow refuses to publish if the `.publish.attestation`
 files are missing.
 
 Run these checks after every publication. `2.9.0` predates the attestation
-workflow, so its artifacts have no provenance; `2.9.1` is the first release that
-can be verified.
+workflow, so its artifacts have no provenance. `2.9.1` is the first release with
+verified PyPI and GitHub provenance.
 
 ## Related guides
 
