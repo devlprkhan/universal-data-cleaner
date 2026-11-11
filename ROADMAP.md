@@ -179,6 +179,7 @@ Ship what is already merged, then verify the release pipeline end to end.
 
 Deliverables:
 
+- [x] Version bump, changelog, and release documentation prepared for `2.9.1`.
 - [ ] Release the chunked-schema, uniqueness, missing-column, CI-matrix, and
       installed-wheel changes already on `main`.
 - [ ] Confirm PyPI shows provenance for both the wheel and the sdist.
@@ -526,7 +527,9 @@ See the [changelog](https://github.com/devlprkhan/universal-data-cleaner/blob/ma
 ## 11. Current step
 
 **Next release: `2.9.1`** — ship the already-merged hardening and verify the new
-provenance gate against real PyPI artifacts.
+provenance gate against real PyPI artifacts. The release PR is in review;
+publishing requires explicit maintainer approval, and the post-publication
+verification is the final gate.
 
 **Next development version: `2.10.0`** — Phase 1, production correctness.
 

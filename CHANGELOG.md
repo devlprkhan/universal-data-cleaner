@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-11-11
+
 ### Added
 
 - CI now tests the minimum supported dependency versions on Python 3.10, the
@@ -32,6 +34,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - `DataCleaner.transform()` now states that a missing fitted input column is
   always fatal, regardless of `on_drift`, because the cleaner cannot safely
   reconstruct it. The documentation matches the behavior.
+
+### Release
+
+- `2.9.1` is the first release built with the attestation workflow. Verify its
+  provenance with the commands in the production guide; `2.9.0` predates the
+  workflow and has no PyPI provenance.
 
 ## [2.9.0] - 2026-11-10
 
