@@ -12,23 +12,20 @@ The decision to prioritise hardening over new features is recorded in
 
 ## Current focus
 
-**`2.9.1` — ship merged hardening and prove provenance.** (Release in review.)
+**`2.10.0` — production correctness.** The next release hardens the behaviour of
+the existing surface rather than adding new data primitives.
 
-The chunked-schema, uniqueness, missing-column, CI-matrix, and installed-wheel
-work is already on `main`. This patch release ships it and verifies the release
-pipeline end to end.
-
-Why a patch release first: `2.9.0` was published before the attestation workflow
-existed, so PyPI correctly shows no provenance for it. `2.9.1` is the first
-release that can demonstrate PyPI and GitHub provenance, and it acts as the
-release-gate rehearsal before `2.10.0`.
+`2.9.1` shipped on 2026-11-11 as the first attested release. PyPI shows
+provenance for both the wheel and the sdist, `gh attestation verify` passes
+against `publish.yml@refs/tags/v2.9.1`, and a clean install from PyPI works.
+`2.9.0` predates the attestation workflow, so it correctly has no provenance.
 
 ## Version sequence
 
 | Version | Theme | Status |
 | --- | --- | --- |
-| `2.9.1` | Ship merged hardening; verify provenance | In review |
-| `2.10.0` | Production correctness | Planned |
+| `2.9.1` | Ship merged hardening; verify PyPI and GitHub provenance | Shipped |
+| `2.10.0` | Production correctness | In progress |
 | `2.11.0` | Large data and performance | Planned |
 | `2.12.0` | Validation and statistical drift | Planned |
 | `2.13.0` | Reproducibility and operations | Planned |
@@ -71,6 +68,7 @@ No new cleaning primitive is planned until this phase is complete.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.9.1` | Ship merged hardening; prove PyPI and GitHub provenance | Shipped |
 | `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
 | `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
 | `2.7.0` | One batch report: `CleanerReport` and the `data-cleaner audit` CLI | Shipped |
