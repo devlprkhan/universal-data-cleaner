@@ -114,6 +114,12 @@ CleanerConfig(on_drift="warn")
 | `"raise"` | Raise `ValueError` when any error-severity finding exists |
 | `"ignore"` | Record findings in `drift_report()` without logging |
 
+Missing fitted input columns are always fatal, regardless of `on_drift`. The
+cleaner learned parameters for those columns and cannot safely reconstruct them,
+so `transform()` raises instead of silently producing a different feature set.
+The drift policy governs other findings such as extra columns, dtype changes,
+categories, and ranges.
+
 ```python
 report = cleaner.drift_report()
 

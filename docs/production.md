@@ -97,8 +97,10 @@ if not ingestion.success:
 ```
 
 `on_error="raise"` fails before the model sees an unparseable ID, date, or
-boolean. The report records normalization counts without logging raw cell values.
-See [Safe ingestion](ingestion.md) for the policy and guardrails.
+boolean. Contract `unique=True` columns are checked within the frame, and
+`iter_csv_safe()` checks them across chunks. The report records normalization
+counts without logging raw cell values. See [Safe ingestion](ingestion.md) for
+the policy and guardrails.
 
 ## Never fit on the wrong data
 
@@ -145,7 +147,9 @@ if not report.empty:
 
 With `on_drift="raise"`, error-severity findings stop the batch before the model
 sees malformed data. With `on_drift="warn"`, the report is logged and cleaning
-continues.
+continues. A missing fitted input column is always fatal, regardless of the
+policy: the cleaner cannot safely reconstruct the learned parameters for a
+column that is absent.
 
 ## Audit the whole batch
 
@@ -219,7 +223,7 @@ values. Run it in tests and in a pre-model validation step.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Required column missing | Upstream schema changed | Contract + `on_drift="raise"` |
+| Required column missing | Upstream schema changed | Restore the column; a missing fitted column is always fatal. Use a contract + `on_drift="raise"` for other drift |
 | IDs gained `.0` or lost zeros | ID was treated as numeric | `ColumnSpec(..., role="id")` and `read_csv_safe()` |
 | Excel IDs lost leading zeros | Cell was stored as a number | Store IDs as text; `read_excel_safe()` reports `numeric_identifier` |
 | Currency or percent strings stayed text | Spreadsheet formatting leaked into the file | `read_csv_safe()` / `read_excel_safe()` and a numeric `ColumnSpec` |
@@ -228,6 +232,30 @@ values. Run it in tests and in a pre-model validation step.
 | Dates disappeared | Datetime column not declared | Add it to `datetime_columns` |
 | Constant feature reached the model | Constant dropping disabled | `drop_constant_columns=True` |
 | Batch rows vanished | Leakage bug or bad join | Audit the join and the split |
+
+## Verify a release
+
+Release builds attach PEP 740 provenance to each PyPI artifact, signed through
+the `publish.yml` workflow with GitHub OIDC. Verify a downloaded package against
+the source repository:
+
+```bash
+uvx "pypi-attestations==0.0.31" verify pypi \
+  --repository https://github.com/devlprkhan/universal-data-cleaner \
+  pypi:universal_data_cleaner-2.9.0-py3-none-any.whl
+```
+
+GitHub also stores a build-provenance attestation for the same artifacts under
+the repository's **Attestations** tab. Check it with the GitHub CLI:
+
+```bash
+gh attestation verify universal_data_cleaner-2.9.0-py3-none-any.whl \
+  --repo devlprkhan/universal-data-cleaner
+```
+
+Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored in
+the repository. The workflow refuses to publish if the `.publish.attestation`
+files are missing.
 
 ## Related guides
 

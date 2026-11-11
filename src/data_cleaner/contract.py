@@ -369,7 +369,7 @@ class DataContract:
                         )
 
             if spec.unique:
-                duplicates = int(series.duplicated().sum())
+                duplicates = int(series.dropna().duplicated().sum())
                 if duplicates:
                     findings.append(
                         self._finding(

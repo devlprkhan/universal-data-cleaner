@@ -35,6 +35,10 @@ jobs:
     name: Build distributions
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -46,6 +50,14 @@ jobs:
 
       - name: Build wheel and sdist
         run: uv build
+
+      - name: Generate PyPI attestations
+        run: uvx "pypi-attestations==0.0.31" sign dist/*
+
+      - name: Generate GitHub build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*
 
       - name: Upload distributions
         uses: actions/upload-artifact@v7
@@ -76,6 +88,9 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Verify attestations are present
+        run: ls -l dist/*.publish.attestation
 
       - name: Publish with trusted publishing
         run: uv publish --trusted-publishing always
