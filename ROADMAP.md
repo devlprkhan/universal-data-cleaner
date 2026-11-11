@@ -195,7 +195,7 @@ published from `main` at `aab2070`):
 | PyPI Integrity API (sdist) | Provenance present; same publisher identity |
 | `gh attestation verify` (wheel) | Passed; signer `publish.yml@refs/tags/v2.9.1`, source commit `aab2070` |
 | `gh attestation verify` (sdist) | Passed; same builder identity |
-| Clean install from PyPI | Published wheel installed in a fresh virtual environment with pandas 3.0.6 |
+| Clean install from PyPI | Published wheel installed in a fresh venv resolved from PyPI (pandas 3.1.1, NumPy 2.5.4, scikit-learn 1.9.1) |
 | `data-cleaner --version` | Reports `data-cleaner 2.9.1` |
 | Installed-wheel smoke test | Fit/transform preserved row count, did not mutate the input, and produced the missing indicators |
 
