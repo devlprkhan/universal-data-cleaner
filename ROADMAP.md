@@ -1,7 +1,7 @@
 # Universal Data Cleaner — Production Roadmap
 
-> **Baseline:** `v2.9.1` (published and provenance-verified 2026-11-11).
-> **Current target:** `v2.10.0` — production correctness (Phase 1).
+> **Baseline:** `v2.10.0` (published and provenance-verified 2026-11-12).
+> **Current target:** `v2.11.0` — large data and performance (Phase 2).
 >
 > This roadmap is the working plan. Every version below is a scoped, tested,
 > documented, and verified release — not a wish list.
@@ -217,7 +217,19 @@ Exit criteria:
 - [x] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
       Verified on PR #43 (2026-11-12): lint, typecheck, tests 3.10–3.13, compat
       (minimum, latest, pandas 3), build, installed wheel, docs, and `ci-success`.
-- [ ] Post-publication provenance verification passes.
+- [x] Post-publication provenance verification passes.
+
+Post-publication verification (2026-11-12, release [v2.10.0](https://github.com/devlprkhan/universal-data-cleaner/releases/tag/v2.10.0),
+published from `main` at `a0759d6`):
+
+| Check | Result |
+| --- | --- |
+| PyPI artifacts | wheel `sha256:602e6e60…`, sdist `sha256:9bb95624…` |
+| PyPI Integrity API | Provenance present for both artifacts; workflow `publish.yml` |
+| `gh attestation verify` (wheel) | Passed; signer `publish.yml@refs/tags/v2.10.0`, source commit `a0759d6` |
+| `gh attestation verify` (sdist) | Passed; same builder identity and source commit |
+| Clean install from PyPI | Fresh venv resolved `2.10.0` from PyPI (pandas 3.1.1, NumPy 2.5.4, scikit-learn 1.9.1) |
+| Installed-wheel smoke test | `transform_with_report`, `int64` preservation, exact `2^53` handling, disk uniqueness, report aggregation, and atomic save/load passed |
 
 ### `2.11.0` — Large data and performance
 
@@ -283,9 +295,8 @@ Status legend: `[ ]` not started · `[~]` partially done · `[x]` done.
 
 ### Phase 1 — Production correctness (P0/P1)
 
-**Execution tracker: implementation complete in `2.10.0`; release verification
-in progress.** Several workstreams are partially addressed; the checkboxes below
-are authoritative.
+**Execution tracker: Phase 1 complete and verified in `2.10.0`.** The checkboxes
+below are authoritative.
 
 #### 1. Verify actual PyPI provenance
 
@@ -303,6 +314,11 @@ open.
 `v2.9.0` has no provenance because it was published before the workflow existed.
 Verified on 2026-11-11 via the PyPI Integrity API (`404` for both artifacts).
 Do not claim otherwise; prove it on the next release.
+
+Verified again on `2.10.0` (2026-11-12): both PyPI artifacts carry provenance from
+`publish.yml@refs/tags/v2.10.0` at commit `a0759d6`, and `gh attestation verify`
+passed for the wheel and sdist. Automating this check after publication remains
+open.
 
 #### 2. Make transformation reporting concurrency-safe
 
@@ -549,12 +565,12 @@ See the [changelog](https://github.com/devlprkhan/universal-data-cleaner/blob/ma
 
 ## 11. Current step
 
-**Current release: `2.9.1`** — shipped and provenance-verified on 2026-11-11. See
+**Current release: `2.10.0`** — shipped and provenance-verified on 2026-11-12. See
 the verification table in section 5.
 
-**Next release: `2.10.0`** — Phase 1, production correctness:
-concurrency-safe reporting, numeric precision policies, atomic artifact writes,
-dependency compatibility enforcement, and bounded chunk uniqueness tracking.
+**Next release: `2.11.0`** — Phase 2, large data and performance: a reproducible
+benchmark suite, peak-RAM measurement, supported workloads, and chunked
+transformation/report aggregation.
 
 The strategic rule stands: **do not add another twenty cleaning capabilities.
 Prove that the capabilities already shipped behave reliably under demanding
