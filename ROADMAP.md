@@ -235,13 +235,13 @@ published from `main` at `a0759d6`):
 
 Exit criteria:
 
-- [ ] A reproducible benchmark suite covers 100K, 1M, and larger datasets.
-- [ ] Peak RAM is measured separately from runtime.
-- [ ] Ingestion, fit, transform, reporting, and validation are benchmarked
+- [x] A reproducible benchmark suite covers 100K, 1M, and larger datasets.
+- [x] Peak RAM is measured separately from runtime.
+- [x] Ingestion, fit, transform, reporting, and validation are benchmarked
       separately.
-- [ ] A supported chunked transformation workflow and report aggregation exist.
-- [ ] A documented supported workload is derived from measurements.
-- [ ] No performance claim appears without benchmark evidence.
+- [x] A supported chunked transformation workflow and report aggregation exist.
+- [x] A documented supported workload is derived from measurements.
+- [x] No performance claim appears without benchmark evidence.
 
 ### `2.12.0` — Validation and statistical drift
 
@@ -369,16 +369,23 @@ documented as per-instance state, not a concurrency-safe batch result.
 
 ### Phase 2 — Large-data and performance engineering (P1/P2)
 
-- [ ] Build a proper benchmark suite.
-- [ ] Benchmark 100K, 1M, and larger realistic datasets.
-- [ ] Test narrow and extremely wide DataFrames.
-- [ ] Test high-cardinality categorical and identifier columns.
-- [ ] Measure peak RAM, not just execution time.
-- [ ] Benchmark ingestion, fit, transform, reporting, and validation separately.
-- [ ] Identify unnecessary DataFrame copies.
-- [ ] Add chunked transformation and aggregated reporting.
-- [ ] Define a documented supported workload based on measured results.
-- [ ] Add optional Parquet ingestion using PyArrow.
+- [x] Build a proper benchmark suite.
+- [x] Benchmark 100K, 1M, and larger realistic datasets.
+- [x] Test narrow and extremely wide DataFrames.
+- [x] Test high-cardinality categorical and identifier columns.
+- [x] Measure peak RAM, not just execution time.
+- [x] Benchmark ingestion, fit, transform, reporting, and validation separately.
+- [x] Identify unnecessary DataFrame copies.
+- [x] Add chunked transformation and aggregated reporting.
+- [x] Define a documented supported workload based on measured results.
+- [x] Add optional Parquet ingestion using PyArrow.
+
+The suite lives in `benchmarks/run_benchmarks.py` and the results and guidance in
+[Performance and large data](performance.md). CI runs a 10K-row smoke matrix so
+the suite cannot silently rot. `transform()` no longer deep-copies its input.
+The reference run covered 42 cases (7 operations × 6 shape/size combinations) up
+to 2M rows; ingestion is cell-bound at ~150K cells/s, while transform holds
+8.6–11M cells/s.
 
 Do not publish speed claims until the benchmark results support them.
 Do not add `partial_fit()` by averaging chunk statistics. Exact medians and

@@ -230,6 +230,36 @@ assert_frame_clean(X_batch_clean)
 `assert_frame_clean()` raises when the output still contains missing or infinite
 values. Run it in tests and in a pre-model validation step.
 
+## Process files larger than memory
+
+For batch files that do not fit in memory, stream chunks and aggregate the
+reports rather than the frames:
+
+```python
+from data_cleaner import combine_drift_reports, combine_ingestion_reports, iter_csv_safe
+
+ingestion_reports = []
+drift_reports = []
+for chunk, ingestion_report in iter_csv_safe(
+    "incoming.csv", contract=contract, chunksize=100_000
+):
+    ingestion_reports.append(ingestion_report)
+    cleaned, drift = cleaner.transform_with_report(chunk)
+    drift_reports.append(drift)
+    write_batch(cleaned)
+
+ingestion = combine_ingestion_reports(ingestion_reports)
+transform = combine_drift_reports(drift_reports)
+ingestion.raise_if_failed()
+transform.raise_if_errors()
+```
+
+`transform_chunks()` wraps the same loop. The aggregated `TransformReport` holds
+findings and row counts, not the cleaned data, so its size depends on the number
+of findings rather than the file size. See
+[Performance and large data](performance.md) for measured behavior and the
+supported workload.
+
 ## Monitor these failure modes
 
 | Symptom | Likely cause | Fix |

@@ -27,8 +27,10 @@ from data_cleaner import (
     DataCleaner,
     DataContract,
     DriftReport,
+    TransformReport,
     assert_frame_clean,
     assert_schema_stable,
+    combine_drift_reports,
     compare_fingerprints,
     dataset_summary,
     drop_duplicate_rows,
@@ -943,6 +945,111 @@ class ProductionHardeningTests(unittest.TestCase):
 
             with self.assertRaises(ArtifactCompatibilityError):
                 DataCleaner.load(path, strict_environment=True)
+
+
+class ChunkedTransformTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.frame = sample_data().drop(columns=["Target"])
+        self.cleaner = DataCleaner(sample_config()).fit(self.frame)
+
+    def _chunks(self, size: int = 30) -> list[pd.DataFrame]:
+        return [
+            self.frame.iloc[start : start + size]
+            for start in range(0, len(self.frame), size)
+        ]
+
+    def test_transform_with_report_records_batch_rows(self) -> None:
+        _, report = self.cleaner.transform_with_report(self.frame)
+        self.assertEqual(report.rows, len(self.frame))
+
+    def test_transform_chunks_yields_independent_chunk_reports(self) -> None:
+        chunks = self._chunks()
+        before = self.cleaner.drift_report_
+
+        results = list(self.cleaner.transform_chunks(chunks))
+
+        self.assertEqual(len(results), len(chunks))
+        self.assertIs(self.cleaner.drift_report_, before)
+        for chunk, (cleaned, report) in zip(chunks, results, strict=True):
+            expected, expected_report = self.cleaner.transform_with_report(chunk)
+            pd.testing.assert_frame_equal(cleaned, expected)
+            self.assertEqual(report.rows, len(chunk))
+            pd.testing.assert_frame_equal(report.findings, expected_report.findings)
+
+    def test_transform_chunks_rejects_a_bare_frame(self) -> None:
+        with self.assertRaises(TypeError):
+            list(self.cleaner.transform_chunks(self.frame))
+
+    def test_transform_chunks_does_not_mutate_input_chunks(self) -> None:
+        chunks = self._chunks()
+        before = [chunk.copy(deep=True) for chunk in chunks]
+
+        results = list(self.cleaner.transform_chunks(chunks))
+
+        for chunk, original in zip(chunks, before, strict=True):
+            pd.testing.assert_frame_equal(chunk, original)
+        cleaned = pd.concat([frame for frame, _ in results])
+        self.assertEqual(len(cleaned), len(self.frame))
+
+    def test_combine_drift_reports_aggregates_rows_and_findings(self) -> None:
+        reports = [
+            report for _, report in self.cleaner.transform_chunks(self._chunks())
+        ]
+
+        combined = combine_drift_reports(reports)
+
+        self.assertIsInstance(combined, TransformReport)
+        self.assertEqual(combined.rows, len(self.frame))
+        self.assertEqual(combined.chunks, len(reports))
+        self.assertEqual(
+            len(combined.findings),
+            sum(len(report.findings) for report in reports),
+        )
+        self.assertEqual(
+            combined.has_drift, any(report.has_drift for report in reports)
+        )
+
+    def test_combine_drift_reports_flags_errors_from_any_chunk(self) -> None:
+        clean = self.cleaner.transform_with_report(self.frame)[1]
+        drift = DriftReport(
+            pd.DataFrame(
+                [
+                    {
+                        "column": "Salary",
+                        "check": "dtype",
+                        "severity": "error",
+                        "expected": "float64",
+                        "actual": "object",
+                        "message": "unexpected dtype",
+                    }
+                ]
+            ),
+            rows=5,
+        )
+
+        combined = combine_drift_reports([clean, drift])
+
+        self.assertTrue(combined.has_errors)
+        self.assertEqual(combined.rows, len(self.frame) + 5)
+        self.assertEqual(combined.chunks, 2)
+        with self.assertRaises(ValueError):
+            combined.raise_if_errors()
+
+    def test_combine_drift_reports_handles_an_empty_run(self) -> None:
+        combined = combine_drift_reports([])
+        self.assertEqual(combined.rows, 0)
+        self.assertEqual(combined.chunks, 0)
+        self.assertFalse(combined.has_drift)
+        self.assertTrue(combined.to_dict()["findings"] == [])
+
+    def test_combined_report_matches_single_transform_findings(self) -> None:
+        chunked = combine_drift_reports(
+            report for _, report in self.cleaner.transform_chunks(self._chunks())
+        )
+        single = self.cleaner.transform_with_report(self.frame)[1]
+
+        self.assertEqual(len(chunked.findings), len(single.findings))
+        self.assertEqual(set(chunked.findings["check"]), set(single.findings["check"]))
 
 
 if __name__ == "__main__":

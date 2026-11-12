@@ -20,15 +20,24 @@ from .artifacts import (
 )
 from .cleaner import ArtifactCompatibilityError, DataCleaner
 from .config import CleanerConfig
-from .contract import ColumnSpec, Contract, DataContract, DriftReport
+from .contract import (
+    ColumnSpec,
+    Contract,
+    DataContract,
+    DriftReport,
+    TransformReport,
+    combine_drift_reports,
+)
 from .decisions import CleaningDecision
 from .ingestion import (
     IngestionError,
     IngestionReport,
     combine_ingestion_reports,
     iter_csv_safe,
+    iter_parquet_safe,
     read_csv_safe,
     read_excel_safe,
+    read_parquet_safe,
 )
 from .integration import (
     DeduplicationReport,
@@ -77,6 +86,7 @@ __all__ = [
     "JoinDiagnosis",
     "ReferentialIntegrityReport",
     "SplitAudit",
+    "TransformReport",
     "ValidationReport",
     "ValidationResult",
     "__version__",
@@ -85,6 +95,7 @@ __all__ = [
     "audit_split",
     "between",
     "check_referential_integrity",
+    "combine_drift_reports",
     "combine_ingestion_reports",
     "compare_fingerprints",
     "dataset_summary",
@@ -95,11 +106,13 @@ __all__ = [
     "has_dtype",
     "in_set",
     "iter_csv_safe",
+    "iter_parquet_safe",
     "matches_pattern",
     "not_null",
     "profile_dataframe",
     "read_csv_safe",
     "read_excel_safe",
+    "read_parquet_safe",
     "row_count_between",
     "unique",
     "validate",

@@ -12,9 +12,11 @@ The decision to prioritise hardening over new features is recorded in
 
 ## Current focus
 
-**`2.11.0` — large data and performance.** The next release builds a reproducible
-benchmark suite, measures peak memory alongside runtime, and documents the
-supported workload before any performance claim is made.
+**`2.11.0` — large data and performance.** This release ships a reproducible
+benchmark suite, measures peak memory separately from runtime, adds chunked
+transformation with run-level report aggregation, and documents the supported
+workload from measured results. No performance claim appears without benchmark
+evidence.
 
 `2.10.0` shipped on 2026-11-12 with provenance for both the wheel and the sdist,
 `gh attestation verify` passes against `publish.yml@refs/tags/v2.10.0`, and a
@@ -31,6 +33,22 @@ predates the attestation workflow, so it correctly has no provenance.
 | `2.13.0` | Reproducibility and operations | Planned |
 | `2.14.0` | Testing and security | Planned |
 | `3.0.0` | Ecosystem readiness | Conditional |
+
+## `2.11.0` — Large data and performance
+
+The `2.11.0` release makes scale behavior measurable and testable:
+
+- a seeded, subprocess-isolated benchmark suite covering ingestion, fit,
+  transform, chunked transform, reporting, and validation;
+- runtime and peak memory reported separately for 100K, 1M, and 2M rows across
+  narrow, wide, and high-cardinality frames;
+- `transform_chunks()` and `combine_drift_reports()` for bounded-memory batch
+  jobs with one aggregated `TransformReport`;
+- optional Parquet ingestion through `read_parquet_safe()` and
+  `iter_parquet_safe()`;
+- removal of an unnecessary input deep copy in `transform()`;
+- a documented supported workload in
+  [Performance and large data](performance.md).
 
 ## `2.10.0` — Production correctness
 
@@ -49,8 +67,6 @@ No new cleaning primitive was added in this phase.
 
 ## Later phases
 
-- **Large data and performance:** benchmark suite, peak-RAM measurement, chunked
-  transformation, supported-workload documentation, optional Parquet ingestion.
 - **Validation and drift:** custom and cross-column validation, conditional and
   grouped rules, PSI and Wasserstein drift, reference comparisons, privacy-safe
   row diagnostics.

@@ -21,8 +21,11 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
 | [`read_csv_safe`](#data_cleaner.read_csv_safe) | Read CSV as text, coerce under a contract, and audit the conversion |
 | [`iter_csv_safe`](#data_cleaner.iter_csv_safe) | Stream a large CSV in typed chunks with one audit report per chunk |
-| [`combine_ingestion_reports`](#data_cleaner.combine_ingestion_reports) | Roll per-chunk reports into one whole-file report |
+| [`combine_ingestion_reports`](#data_cleaner.combine_ingestion_reports) | Roll per-chunk ingestion reports into one whole-file report |
 | [`read_excel_safe`](#data_cleaner.read_excel_safe) | Read one Excel sheet with the same guards and audit report |
+| [`read_parquet_safe`](#data_cleaner.read_parquet_safe) | Read Parquet under a contract with the same audit report (PyArrow extra) |
+| [`iter_parquet_safe`](#data_cleaner.iter_parquet_safe) | Stream a large Parquet file in audited record batches |
+| [`combine_drift_reports`](#data_cleaner.combine_drift_reports) | Roll per-chunk drift reports into one run-level `TransformReport` |
 | [`CleanerReport`](#data_cleaner.CleanerReport) | Combine profile, contract, validation, ingestion, and decisions for one batch |
 | [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
 | [`audit_split`](#data_cleaner.audit_split) | Check a train/test split for leakage before training |
@@ -47,12 +50,18 @@ incrementally.
 
 ::: data_cleaner.DriftReport
 
+::: data_cleaner.TransformReport
+
+::: data_cleaner.combine_drift_reports
+
 `Contract` is a shorthand alias for `DataContract`.
 
 ## Safe ingestion
 
 `read_excel_safe` requires the optional `excel` extra (`openpyxl` for `.xlsx` and
-`.xlsm`). `read_csv_safe` has no extra dependency.
+`.xlsm`). `read_parquet_safe` and `iter_parquet_safe` require the optional
+`parquet` extra (`pyarrow`). `read_csv_safe` and `iter_csv_safe` have no extra
+dependency.
 
 ::: data_cleaner.IngestionReport
 
@@ -65,6 +74,10 @@ incrementally.
 ::: data_cleaner.combine_ingestion_reports
 
 ::: data_cleaner.read_excel_safe
+
+::: data_cleaner.read_parquet_safe
+
+::: data_cleaner.iter_parquet_safe
 
 ## Reporting
 

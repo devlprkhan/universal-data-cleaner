@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import io
 import tempfile
 import unittest
@@ -15,8 +16,12 @@ from data_cleaner import (
     IngestionReport,
     combine_ingestion_reports,
     iter_csv_safe,
+    iter_parquet_safe,
     read_csv_safe,
+    read_parquet_safe,
 )
+
+HAS_PYARROW = importlib.util.find_spec("pyarrow") is not None
 
 
 class SafeCsvIngestionTests(unittest.TestCase):
@@ -463,3 +468,87 @@ class StreamingUniquenessTests(unittest.TestCase):
         self.assertTrue(combined.findings.empty)
         self.assertTrue(combined.columns.empty)
         self.assertTrue(combined.success)
+
+
+@unittest.skipUnless(HAS_PYARROW, "PyArrow is required for Parquet tests")
+class ParquetIngestionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.frame = pd.DataFrame(
+            {
+                "order_id": ["001", "002", "003", "001"],
+                "amount": [10.5, 20.0, None, 5.0],
+                "placed": pd.to_datetime(
+                    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]
+                ),
+                "active": [True, False, True, True],
+                "region": ["north", "south", "north", "east"],
+            }
+        )
+        self.contract = DataContract(
+            columns=(
+                ColumnSpec("order_id", role="id", unique=True),
+                ColumnSpec("amount", role="numeric"),
+                ColumnSpec("placed", role="datetime"),
+                ColumnSpec("active", role="boolean"),
+                ColumnSpec("region", role="category"),
+            )
+        )
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / "orders.parquet"
+        self.frame.to_parquet(self.path, index=False)
+
+    def test_read_parquet_safe_applies_the_contract(self) -> None:
+        frame, report = read_parquet_safe(
+            self.path, contract=self.contract, on_error="ignore"
+        )
+
+        self.assertEqual(list(frame.columns), list(self.frame.columns))
+        self.assertEqual(frame["order_id"].tolist(), ["001", "002", "003", "001"])
+        self.assertTrue(ptypes.is_float_dtype(frame["amount"]))
+        self.assertTrue(ptypes.is_datetime64_any_dtype(frame["placed"]))
+        self.assertTrue(ptypes.is_bool_dtype(frame["active"]))
+        self.assertIn("duplicate_values", set(report.findings["check"]))
+        self.assertEqual(report.rows, len(self.frame))
+        self.assertEqual(report.source, str(self.path))
+
+    def test_read_parquet_safe_raises_for_missing_declared_columns(self) -> None:
+        contract = DataContract(columns=(ColumnSpec("missing", role="numeric"),))
+        with self.assertRaises(IngestionError):
+            read_parquet_safe(self.path, contract=contract, on_error="raise")
+
+    def test_read_parquet_safe_rejects_reserved_options(self) -> None:
+        with self.assertRaises(TypeError):
+            read_parquet_safe(self.path, columns=["amount"])
+        with self.assertRaises(ValueError):
+            read_parquet_safe(self.path, on_error="bogus")  # type: ignore[arg-type]
+
+    def test_iter_parquet_safe_streams_batches_with_continuous_index(self) -> None:
+        chunks = list(
+            iter_parquet_safe(
+                self.path,
+                contract=self.contract,
+                batch_size=2,
+                on_error="ignore",
+                unique_tracking="disk",
+            )
+        )
+
+        self.assertEqual([len(frame) for frame, _ in chunks], [2, 2])
+        indexes = [index for frame, _ in chunks for index in frame.index]
+        self.assertEqual(indexes, [0, 1, 2, 3])
+        reports = [report for _, report in chunks]
+        combined = combine_ingestion_reports(reports)
+        self.assertEqual(combined.rows, 4)
+        self.assertIn("duplicate_values", set(combined.findings["check"]))
+
+    def test_iter_parquet_safe_infers_schema_from_first_batch(self) -> None:
+        chunks = list(iter_parquet_safe(self.path, batch_size=2, on_error="ignore"))
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(list(chunks[0][0].columns), list(self.frame.columns))
+        self.assertEqual(list(chunks[1][0].columns), list(self.frame.columns))
+
+    def test_iter_parquet_safe_rejects_invalid_batch_size(self) -> None:
+        for batch_size in (0, -1, True, 1.5):
+            with self.assertRaises(ValueError):
+                list(iter_parquet_safe(self.path, batch_size=batch_size))  # type: ignore[arg-type]

@@ -7,6 +7,40 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-13
+
+### Added
+
+- `DataCleaner.transform_chunks(chunks)` streams an iterable of DataFrames and
+  yields `(cleaned_chunk, DriftReport)` without touching shared instance state,
+  keeping one chunk in memory at a time. A bare DataFrame is rejected.
+- `combine_drift_reports(reports)` rolls per-chunk reports into a
+  `TransformReport` with summed rows, chunk count, and concatenated findings.
+  `TransformReport` exposes the same `has_drift`, `errors`, `warnings`,
+  `summary()`, and `raise_if_errors()` surface as `DriftReport`.
+- `DriftReport.rows` records the batch size, so aggregated reports can report a
+  run-level row count without retaining cleaned frames.
+- `read_parquet_safe()` and `iter_parquet_safe()` add optional Parquet ingestion
+  through PyArrow, with the same contract-driven audit, cross-batch uniqueness
+  tracking, and report aggregation as the CSV readers. Install the `parquet`
+  extra.
+- A reproducible benchmark suite (`benchmarks/run_benchmarks.py`) measures
+  ingestion, fit, transform, chunked transform, reporting, and validation at
+  100K, 1M, and 2M rows across narrow, wide, and high-cardinality frames. Runtime
+  and peak memory are measured separately, and each case runs in a fresh
+  subprocess.
+- `docs/performance.md` documents the methodology, measured results, supported
+  workload, and chunked workflow.
+
+### Changed
+
+- `transform()` no longer deep-copies the input frame. The cleaner never mutates
+  the caller's data, so the copy was unnecessary; removing it lowers peak memory
+  on large batches.
+- `transform()` skips redundant column selection and reindexing when the input
+  already matches the fitted schema.
+- CI runs the benchmark smoke matrix, so the suite cannot silently rot.
+
 ## [2.10.0] - 2026-11-12
 
 ### Added

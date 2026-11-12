@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import Iterable, Iterator
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -252,6 +253,50 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         """
         return self._transform(X)
 
+    def transform_chunks(
+        self, chunks: Iterable[pd.DataFrame]
+    ) -> Iterator[tuple[pd.DataFrame, DriftReport]]:
+        """Clean a stream of frames and yield each result with its own report.
+
+        This is the chunked counterpart to :meth:`transform_with_report`. It
+        keeps one chunk in memory at a time, never writes shared instance state,
+        and is safe to consume from concurrent workers as long as each worker
+        owns its iterator.
+
+        Parameters
+        ----------
+        chunks:
+            Iterable of DataFrames, usually produced by
+            :func:`~data_cleaner.iter_csv_safe` or
+            :func:`~data_cleaner.iter_parquet_safe`. A bare DataFrame is rejected
+            because iterating it would yield column names, not batches.
+
+        Yields
+        ------
+        tuple[pandas.DataFrame, DriftReport]
+            The cleaned chunk and its findings. ``report.rows`` is the chunk
+            size. Use :func:`~data_cleaner.combine_drift_reports` to roll the
+            reports up without keeping every frame.
+
+        Examples
+        --------
+        >>> cleans = cleaner.transform_chunks(frame for frame, _ in chunks)
+        >>> for cleaned, report in cleans:
+        ...     store(cleaned)
+        """
+        # Typed as ``object`` so the guard stays reachable for static checkers:
+        # the annotation promises an iterable, but a bare frame is a likely
+        # mistake and must fail with a clear message instead of yielding columns.
+        raw: object = chunks
+        if isinstance(raw, pd.DataFrame):
+            raise TypeError(
+                "chunks must be an iterable of DataFrames, not a single "
+                "DataFrame; use transform_with_report() for one frame or wrap "
+                "it in a list"
+            )
+        for chunk in chunks:
+            yield self.transform_with_report(chunk)
+
     def _transform(self, X: pd.DataFrame) -> tuple[pd.DataFrame, DriftReport]:
         """Shared implementation for the public transform entry points."""
         self._ensure_fitted()
@@ -277,7 +322,8 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 len(extra),
                 extra,
             )
-        frame = frame.loc[:, expected]
+        if list(frame.columns) != expected:
+            frame = frame.loc[:, expected]
         prepared, missing_flags, _ = self._prepare_frame(frame, self.roles_)
 
         for column in self.numeric_columns_:
@@ -317,6 +363,8 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             raise RuntimeError(
                 f"Internal error: expected cleaned columns missing: {missing_output}"
             )
+        if list(prepared.columns) == list(self.columns_):
+            return prepared, report
         return prepared.reindex(columns=self.columns_), report
 
     def fit_transform(self, X: pd.DataFrame, y: object | None = None) -> pd.DataFrame:
@@ -525,9 +573,13 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         return spec.role if spec is not None else None
 
     def _contract_report(self, frame: pd.DataFrame) -> DriftReport:
-        if self.contract_ is None:
-            return DriftReport.empty()
-        return self.contract_.check(frame)
+        report = (
+            self.contract_.check(frame)
+            if self.contract_ is not None
+            else DriftReport.empty()
+        )
+        report.rows = len(frame)
+        return report
 
     def _handle_drift(self, report: DriftReport) -> None:
         if not report.has_drift:
@@ -815,7 +867,10 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 )
         if not allow_empty and frame.empty:
             raise ValueError("Cannot fit DataCleaner on an empty DataFrame")
-        return frame.copy(deep=True)
+        # The cleaner never mutates the caller's frame: every cleaning step
+        # builds a new Series or DataFrame. Returning the input avoids a full
+        # copy of large batches; the no-mutation guarantee is covered by tests.
+        return frame
 
     def _infer_roles(self, frame: pd.DataFrame) -> dict[str, str]:
         cfg = self.config
