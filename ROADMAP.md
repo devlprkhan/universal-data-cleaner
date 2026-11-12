@@ -1,7 +1,7 @@
 # Universal Data Cleaner — Production Roadmap
 
-> **Baseline:** `v2.10.0` (published and provenance-verified 2026-11-12).
-> **Current target:** `v2.11.0` — large data and performance (Phase 2).
+> **Baseline:** `v2.11.0` (published and provenance-verified 2026-11-13).
+> **Current target:** `v2.12.0` — validation and statistical drift (Phase 3).
 >
 > This roadmap is the working plan. Every version below is a scoped, tested,
 > documented, and verified release — not a wish list.
@@ -242,6 +242,18 @@ Exit criteria:
 - [x] A supported chunked transformation workflow and report aggregation exist.
 - [x] A documented supported workload is derived from measurements.
 - [x] No performance claim appears without benchmark evidence.
+
+Post-publication verification (2026-11-13, release [v2.11.0](https://github.com/devlprkhan/universal-data-cleaner/releases/tag/v2.11.0),
+published from `main` at `392b1f8`):
+
+| Check | Result |
+| --- | --- |
+| PyPI artifacts | wheel `sha256:62cefc11…`, sdist `sha256:5ba28b7a…` |
+| PyPI Integrity API | Provenance present for both artifacts; workflow `publish.yml` |
+| `gh attestation verify` (wheel) | Passed; signer `publish.yml@refs/tags/v2.11.0`, source commit `392b1f8` |
+| `gh attestation verify` (sdist) | Passed; same builder identity and source commit |
+| Clean install from PyPI | Fresh venv resolved `2.11.0` from PyPI (pandas 3.1.1, NumPy 2.5.4, scikit-learn 1.9.1, PyArrow 26.0.1) |
+| Installed-wheel smoke test | `transform_with_report`, `transform_chunks` aggregation, bare-frame rejection, `int64` preservation, Parquet read and batch streaming, CSV streaming, and atomic save/load passed |
 
 ### `2.12.0` — Validation and statistical drift
 
@@ -572,12 +584,12 @@ See the [changelog](https://github.com/devlprkhan/universal-data-cleaner/blob/ma
 
 ## 11. Current step
 
-**Current release: `2.10.0`** — shipped and provenance-verified on 2026-11-12. See
+**Current release: `2.11.0`** — shipped and provenance-verified on 2026-11-13. See
 the verification table in section 5.
 
-**Next release: `2.11.0`** — Phase 2, large data and performance: a reproducible
-benchmark suite, peak-RAM measurement, supported workloads, and chunked
-transformation/report aggregation.
+**Next release: `2.12.0`** — Phase 3, validation and statistical drift: a custom
+validation protocol with cross-column and conditional rules, PSI and Wasserstein
+drift, reference comparisons, and privacy-safe row diagnostics.
 
 The strategic rule stands: **do not add another twenty cleaning capabilities.
 Prove that the capabilities already shipped behave reliably under demanding

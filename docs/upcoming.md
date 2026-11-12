@@ -12,31 +12,31 @@ The decision to prioritise hardening over new features is recorded in
 
 ## Current focus
 
-**`2.11.0` — large data and performance.** This release ships a reproducible
-benchmark suite, measures peak memory separately from runtime, adds chunked
-transformation with run-level report aggregation, and documents the supported
-workload from measured results. No performance claim appears without benchmark
-evidence.
+**`2.12.0` — validation and statistical drift.** The next release extends the
+validation layer with cross-column and conditional rules, adds PSI and
+Wasserstein drift against a reference distribution, and keeps failing-row
+diagnostics bounded and privacy-safe.
 
-`2.10.0` shipped on 2026-11-12 with provenance for both the wheel and the sdist,
-`gh attestation verify` passes against `publish.yml@refs/tags/v2.10.0`, and a
-clean install from PyPI works. `2.9.1` was the first attested release. `2.9.0`
-predates the attestation workflow, so it correctly has no provenance.
+`2.11.0` shipped on 2026-11-13 with provenance for both the wheel and the sdist;
+`gh attestation verify` passes against `publish.yml@refs/tags/v2.11.0`, and a
+clean install from PyPI works. `2.10.0` shipped the same way on 2026-11-12.
+`2.9.1` was the first attested release. `2.9.0` predates the attestation
+workflow, so it correctly has no provenance.
 
 ## Version sequence
 
 | Version | Theme | Status |
 | --- | --- | --- |
 | `2.10.0` | Production correctness | Shipped |
-| `2.11.0` | Large data and performance | In progress |
-| `2.12.0` | Validation and statistical drift | Planned |
+| `2.11.0` | Large data and performance | Shipped |
+| `2.12.0` | Validation and statistical drift | Next |
 | `2.13.0` | Reproducibility and operations | Planned |
 | `2.14.0` | Testing and security | Planned |
 | `3.0.0` | Ecosystem readiness | Conditional |
 
 ## `2.11.0` — Large data and performance
 
-The `2.11.0` release makes scale behavior measurable and testable:
+The `2.11.0` release made scale behavior measurable and testable:
 
 - a seeded, subprocess-isolated benchmark suite covering ingestion, fit,
   transform, chunked transform, reporting, and validation;
@@ -48,7 +48,8 @@ The `2.11.0` release makes scale behavior measurable and testable:
   `iter_parquet_safe()`;
 - removal of an unnecessary input deep copy in `transform()`;
 - a documented supported workload in
-  [Performance and large data](performance.md).
+  [Performance and large data](performance.md), derived from the committed
+  reference run.
 
 ## `2.10.0` — Production correctness
 
