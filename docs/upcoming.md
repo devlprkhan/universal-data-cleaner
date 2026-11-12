@@ -12,21 +12,21 @@ The decision to prioritise hardening over new features is recorded in
 
 ## Current focus
 
-**`2.10.0` — production correctness.** The next release hardens the behaviour of
-the existing surface rather than adding new data primitives.
+**`2.11.0` — large data and performance.** The next release builds a reproducible
+benchmark suite, measures peak memory alongside runtime, and documents the
+supported workload before any performance claim is made.
 
-`2.9.1` shipped on 2026-11-11 as the first attested release. PyPI shows
-provenance for both the wheel and the sdist, `gh attestation verify` passes
-against `publish.yml@refs/tags/v2.9.1`, and a clean install from PyPI works.
-`2.9.0` predates the attestation workflow, so it correctly has no provenance.
+`2.10.0` shipped on 2026-11-12 with provenance for both the wheel and the sdist,
+`gh attestation verify` passes against `publish.yml@refs/tags/v2.10.0`, and a
+clean install from PyPI works. `2.9.1` was the first attested release. `2.9.0`
+predates the attestation workflow, so it correctly has no provenance.
 
 ## Version sequence
 
 | Version | Theme | Status |
 | --- | --- | --- |
-| `2.9.1` | Ship merged hardening; verify PyPI and GitHub provenance | Shipped |
-| `2.10.0` | Production correctness | In progress |
-| `2.11.0` | Large data and performance | Planned |
+| `2.10.0` | Production correctness | Shipped |
+| `2.11.0` | Large data and performance | In progress |
 | `2.12.0` | Validation and statistical drift | Planned |
 | `2.13.0` | Reproducibility and operations | Planned |
 | `2.14.0` | Testing and security | Planned |
@@ -34,8 +34,7 @@ against `publish.yml@refs/tags/v2.9.1`, and a clean install from PyPI works.
 
 ## `2.10.0` — Production correctness
 
-The next development release fixes the highest-risk gaps in the existing
-surface:
+The `2.10.0` release fixed the highest-risk gaps in the existing surface:
 
 - concurrency-safe transformation reporting, so parallel batches cannot
   overwrite each other's drift reports;
@@ -46,7 +45,7 @@ surface:
 - aggregated chunk reports and documented streaming semantics;
 - post-publication provenance verification as a release gate.
 
-No new cleaning primitive is planned until this phase is complete.
+No new cleaning primitive was added in this phase.
 
 ## Later phases
 
@@ -68,6 +67,7 @@ No new cleaning primitive is planned until this phase is complete.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.10.0` | Production correctness: concurrency-safe reports, precision policies, atomic artifacts, chunked uniqueness | Shipped |
 | `2.9.1` | Ship merged hardening; prove PyPI and GitHub provenance | Shipped |
 | `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
 | `2.8.0` | Excel ingestion on the same `IngestionReport` model | Shipped |
