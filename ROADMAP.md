@@ -214,7 +214,9 @@ Exit criteria:
 - [x] Numeric precision and infinity/NaN policies tested at boundaries.
 - [x] Artifact writes are atomic and dependency compatibility is enforced.
 - [x] Chunked uniqueness tracking has a bounded/disk-backed mode.
-- [ ] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
+- [x] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
+      Verified on PR #43 (2026-11-12): lint, typecheck, tests 3.10–3.13, compat
+      (minimum, latest, pandas 3), build, installed wheel, docs, and `ci-success`.
 - [ ] Post-publication provenance verification passes.
 
 ### `2.11.0` — Large data and performance
