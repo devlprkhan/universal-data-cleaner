@@ -33,6 +33,8 @@ class CleanerConfig:
         "is_weekend",
     )
     unseen_category: Literal["keep", "fill"] = "keep"
+    preserve_integer_dtypes: bool = True
+    on_precision_loss: Literal["raise", "warn", "coerce"] = "coerce"
     contract: DataContract | None = None
     on_drift: Literal["raise", "warn", "ignore"] = "warn"
     infer_contract: bool = True
@@ -59,6 +61,8 @@ class CleanerConfig:
             raise ValueError("outlier_multiplier must be > 0")
         if self.unseen_category not in {"keep", "fill"}:
             raise ValueError("unseen_category must be one of: keep, fill")
+        if self.on_precision_loss not in {"raise", "warn", "coerce"}:
+            raise ValueError("on_precision_loss must be one of: raise, warn, coerce")
         if self.on_drift not in {"raise", "warn", "ignore"}:
             raise ValueError("on_drift must be one of: raise, warn, ignore")
         if self.contract is not None and not isinstance(self.contract, DataContract):

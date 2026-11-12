@@ -7,6 +7,46 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-12
+
+### Added
+
+- `DataCleaner.transform_with_report(X)` returns `(cleaned_frame, drift_report)`
+  for one batch and does not read or write the shared `drift_report_` state, so
+  a fitted cleaner can safely serve concurrent batches. `transform()` remains
+  backward compatible and documents `drift_report_` as last-call state.
+- `CleanerConfig.preserve_integer_dtypes` (default `True`) keeps integral
+  numeric columns as `int64` after imputation and clipping when the learned fill
+  value and outlier bounds are integral. Otherwise the column falls back to
+  `float64` and logs the fallback.
+- `CleanerConfig.on_precision_loss` selects `"coerce"` (default), `"warn"`, or
+  `"raise"` when `float64` cannot represent an integer exactly. Detection is
+  exact at the `2^53` boundary rather than a blanket threshold.
+- `iter_csv_safe()` gained `unique_tracking` (`"memory"`, `"disk"`, or `"auto"`),
+  `unique_tracking_limit`, and `unique_tracking_path`. Disk tracking uses a
+  temporary SQLite database, and `"auto"` migrates from memory once the limit is
+  exceeded.
+- `combine_ingestion_reports(reports, source=None)` rolls per-chunk reports into
+  one whole-file report with the summed row count and concatenated findings.
+- `DataCleaner.load(..., strict_environment=True)` raises
+  `ArtifactCompatibilityError` when the recorded pandas, NumPy, or scikit-learn
+  major version differs from the current runtime. The default logs a warning.
+
+### Changed
+
+- `DataCleaner.save()` now writes to a temporary file, validates the written
+  artifact, and atomically replaces the target with `os.replace`. A failed or
+  interrupted save keeps the previous artifact and removes partial files.
+- `DataCleaner.load()` wraps unreadable artifacts in a `ValueError` with the
+  underlying cause instead of leaking an arbitrary unpickling exception.
+
+### Fixed
+
+- Integer columns are no longer silently rounded through `float64` during
+  cleaning. Values above `2^53` are preserved exactly by default.
+- Cross-chunk uniqueness tracking no longer stores an ever-growing pandas index
+  per column; the default `"auto"` mode is bounded and switches to disk.
+
 ## [2.9.1] - 2026-11-11
 
 ### Added

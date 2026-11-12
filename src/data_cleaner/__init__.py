@@ -25,6 +25,7 @@ from .decisions import CleaningDecision
 from .ingestion import (
     IngestionError,
     IngestionReport,
+    combine_ingestion_reports,
     iter_csv_safe,
     read_csv_safe,
     read_excel_safe,
@@ -84,6 +85,7 @@ __all__ = [
     "audit_split",
     "between",
     "check_referential_integrity",
+    "combine_ingestion_reports",
     "compare_fingerprints",
     "dataset_summary",
     "deduplicate_by_business_key",

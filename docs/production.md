@@ -138,12 +138,23 @@ columns that should not reach the model. See
 ## Watch the schema on every batch
 
 ```python
-X_batch_clean = cleaner.transform(X_batch)
+from data_cleaner import DataCleaner
 
-report = cleaner.drift_report()
-if not report.empty:
-    print(report[["column", "check", "severity", "message"]])
+X_batch_clean, report = cleaner.transform_with_report(X_batch)
+
+if report.has_drift:
+    print(report.findings[["column", "check", "severity", "message"]])
 ```
+
+`transform_with_report()` returns the cleaned frame and its drift report
+together. It does not read or write shared instance state, so one fitted cleaner
+can service concurrent batches safely.
+
+`cleaner.transform(X_batch)` remains available for existing pipelines. It stores
+the findings from its most recent call in `drift_report_` for backward
+compatibility. Treat that attribute as per-instance last-call state: two
+concurrent `transform()` calls can overwrite each other's report, even though the
+returned frames are independent.
 
 With `on_drift="raise"`, error-severity findings stop the batch before the model
 sees malformed data. With `on_drift="warn"`, the report is logged and cleaning

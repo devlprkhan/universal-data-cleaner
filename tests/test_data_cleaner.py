@@ -4,8 +4,10 @@ import json
 import pickle
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import joblib
 import numpy as np
@@ -774,6 +776,173 @@ class PackageTests(unittest.TestCase):
             ],
         )
         self.assertFalse(cleaned["age"].isna().any())
+
+
+class ProductionHardeningTests(unittest.TestCase):
+    def test_integer_dtype_is_preserved_when_safe(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "count": [1, 2, 3, 4, 5],
+                "value": [1.5, 2.5, 3.5, 4.5, 5.5],
+            }
+        )
+        cleaner = DataCleaner(CleanerConfig(numeric_columns=("count", "value"))).fit(
+            frame
+        )
+
+        cleaned = cleaner.transform(frame)
+
+        self.assertTrue(pd.api.types.is_integer_dtype(cleaned["count"]))
+        self.assertTrue(pd.api.types.is_float_dtype(cleaned["value"]))
+        self.assertEqual(cleaned["count"].tolist(), [1, 2, 3, 4, 5])
+
+    def test_integer_preservation_falls_back_on_fractional_bounds(self) -> None:
+        frame = pd.DataFrame({"count": [1, 2, 2, 3, 100]})
+        cleaner = DataCleaner(
+            CleanerConfig(numeric_columns=("count",), cap_outliers=True)
+        ).fit(frame)
+
+        cleaned = cleaner.transform(frame)
+
+        self.assertTrue(pd.api.types.is_float_dtype(cleaned["count"]))
+        self.assertLess(cleaned["count"].max(), 100)
+
+    def test_large_integers_are_preserved_exactly(self) -> None:
+        boundary = 2**53
+        frame = pd.DataFrame({"id": [boundary + 1, boundary + 3]})
+        cleaner = DataCleaner(CleanerConfig(numeric_columns=("id",))).fit(frame)
+
+        cleaned = cleaner.transform(frame)
+
+        self.assertTrue(pd.api.types.is_integer_dtype(cleaned["id"]))
+        self.assertEqual(cleaned["id"].tolist(), [boundary + 1, boundary + 3])
+
+    def test_precision_check_only_flags_unrepresentable_integers(self) -> None:
+        frame = pd.DataFrame({"id": [2**53 + 2, 2**53 + 4], "other": [1, 2]})
+        config = CleanerConfig(
+            numeric_columns=("id",),
+            preserve_integer_dtypes=False,
+            on_precision_loss="raise",
+        )
+        cleaner = DataCleaner(config).fit(frame)
+        self.assertTrue(pd.api.types.is_float_dtype(cleaner.transform(frame)["id"]))
+
+    def test_precision_loss_raise_and_warn_policies(self) -> None:
+        frame = pd.DataFrame({"id": [2**53 + 1, 2**53 + 3]})
+        base: dict[str, Any] = {
+            "numeric_columns": ("id",),
+            "preserve_integer_dtypes": False,
+        }
+
+        with self.assertRaises(ValueError):
+            DataCleaner(CleanerConfig(**base, on_precision_loss="raise")).fit(frame)
+
+        with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+            cleaner = DataCleaner(CleanerConfig(**base, on_precision_loss="warn")).fit(
+                frame
+            )
+        self.assertTrue(any("2^53" in line for line in logs.output))
+        cleaned = cleaner.transform(frame)
+        self.assertTrue(pd.api.types.is_float_dtype(cleaned["id"]))
+
+    def test_transform_with_report_does_not_touch_shared_state(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+        cleaned_by_transform = cleaner.transform(features)
+        shared = cleaner.drift_report_
+
+        cleaned, report = cleaner.transform_with_report(features)
+
+        self.assertIsInstance(report, DriftReport)
+        self.assertIs(cleaner.drift_report_, shared)
+        pd.testing.assert_frame_equal(cleaned, cleaned_by_transform)
+
+    def test_transform_with_report_is_safe_from_multiple_threads(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+
+        def run(_: int) -> pd.DataFrame:
+            cleaned, report = cleaner.transform_with_report(features)
+            self.assertFalse(report.has_errors)
+            return cleaned
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            frames = list(pool.map(run, range(8)))
+
+        for frame in frames[1:]:
+            pd.testing.assert_frame_equal(frames[0], frame)
+
+    def test_failed_save_keeps_the_previous_artifact_and_no_temp_files(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            original = path.read_bytes()
+
+            with (
+                mock.patch(
+                    "data_cleaner.cleaner.joblib.dump",
+                    side_effect=OSError("disk full"),
+                ),
+                self.assertRaises(OSError),
+            ):
+                cleaner.save(path)
+
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    def test_invalid_written_artifact_is_rejected_and_cleaned_up(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+
+            with (
+                mock.patch(
+                    "data_cleaner.cleaner.joblib.load",
+                    return_value={"unexpected": True},
+                ),
+                self.assertRaises(ValueError),
+            ):
+                cleaner.save(path)
+
+            self.assertFalse(path.exists())
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_corrupt_or_truncated_artifacts_raise_value_error(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+        with tempfile.TemporaryDirectory() as directory:
+            corrupt = Path(directory) / "corrupt.joblib"
+            corrupt.write_bytes(b"not a joblib artifact")
+            with self.assertRaises(ValueError):
+                DataCleaner.load(corrupt, verify_version=False)
+
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            data = path.read_bytes()
+            path.write_bytes(data[: len(data) // 2])
+            with self.assertRaises(ValueError):
+                DataCleaner.load(path)
+
+    def test_environment_mismatch_warns_by_default_and_can_be_strict(self) -> None:
+        features = sample_data().drop(columns=["Target"])
+        cleaner = DataCleaner(sample_config()).fit(features)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleaner.joblib"
+            cleaner.save(path)
+            payload = joblib.load(path)
+            payload["manifest"]["environment"]["pandas"] = "1.5.0"
+            joblib.dump(payload, path, compress=3)
+
+            with self.assertLogs("data_cleaner.cleaner", level="WARNING") as logs:
+                restored = DataCleaner.load(path)
+            self.assertTrue(any("pandas" in line for line in logs.output))
+            self.assertIsInstance(restored, DataCleaner)
+
+            with self.assertRaises(ArtifactCompatibilityError):
+                DataCleaner.load(path, strict_environment=True)
 
 
 if __name__ == "__main__":
