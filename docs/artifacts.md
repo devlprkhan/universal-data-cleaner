@@ -65,10 +65,25 @@ restored = DataCleaner.load("artifacts/data_cleaner.joblib")
 X_new_clean = restored.transform(X_new)
 ```
 
-`save()` embeds the manifest and the training fingerprint in the artifact.
-`load()` refuses artifacts written by an incompatible artifact format or library
-major version and raises `ArtifactCompatibilityError`. The artifact format for
-the 2.x line is `2`.
+`save()` embeds the manifest and the training fingerprint in the artifact. It
+writes to a temporary file in the destination directory, reads the file back to
+validate it, and then atomically replaces the target with `os.replace`. A failed
+or interrupted save leaves the previous artifact intact and removes the partial
+file. `load()` refuses artifacts written by an incompatible artifact format or
+library major version and raises `ArtifactCompatibilityError`. The artifact
+format for the 2.x line is `2`.
+
+The manifest also records the pandas, NumPy, and scikit-learn versions used to
+write the artifact. If a major version differs at load time, `load()` logs a
+warning by default. Promote that warning to an error when a mismatched runtime
+must never load the artifact:
+
+```python
+restored = DataCleaner.load(
+    "artifacts/data_cleaner.joblib",
+    strict_environment=True,
+)
+```
 
 If you have deliberately accepted the risk, load an incompatible artifact with a
 warning:
@@ -82,6 +97,16 @@ restored = DataCleaner.load(
 
 `verify_version=False` skips the compatibility check entirely. Artifacts are
 restored with `joblib`, which uses pickle; only load files you trust.
+
+### Why the library still uses joblib
+
+We evaluated `skops.io` for untrusted artifacts. It requires converting every
+nested object through a trusted-type allowlist and does not transparently cover
+the full pandas and scikit-learn state stored in a cleaner. Adding it as a
+runtime dependency would break the library's dependency-light guarantee, so the
+2.x line continues to use `joblib` and documents the trust boundary: treat
+artifacts as code, store them in a controlled location, and never load a file
+from an untrusted source.
 
 Use `artifact_manifest()` on a loaded cleaner to inspect what was stored:
 

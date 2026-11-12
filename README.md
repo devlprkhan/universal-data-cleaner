@@ -105,7 +105,8 @@ for the full explanation.
 
 ## What it handles
 
-- numeric coercion, median / mean / constant imputation, and IQR capping
+- numeric coercion, median / mean / constant imputation, IQR capping, and exact
+  `int64` preservation with explicit precision-loss policies
 - categorical mode / constant imputation and a keep-or-fill unseen policy
 - boolean coercion and imputation
 - datetime parsing plus calendar feature extraction
@@ -115,11 +116,13 @@ for the full explanation.
 - `CleanerReport` combining profile, contract drift, validation, ingestion, and
   cleaner decisions, plus a `data-cleaner audit` CLI
 - declarative contracts with roles, allowed values, ranges, patterns, and uniqueness
-- automatic train-schema contract inference and transform-time drift reports
+- automatic train-schema contract inference, transform-time drift reports, and
+  `transform_with_report()` for concurrency-safe batch reporting
 - expectation checks and validation reports
 - join diagnostics, referential integrity, and audited business-key dedup
 - train/test split audits for duplicate, group, temporal, and target leakage
-- joblib save / load, manifests, and stable data fingerprints
+- joblib save / load with atomic writes, manifests, runtime compatibility
+  checks, and stable data fingerprints
 - scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility
 - stable output schema and column order; inputs are never mutated and inference
   rows are never dropped

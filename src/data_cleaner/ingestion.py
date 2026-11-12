@@ -12,10 +12,13 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sqlite3
+import tempfile
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import IO, Any, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 
@@ -676,15 +679,129 @@ def _ingest_column(
     return result, detected
 
 
+class _UniqueTracker:
+    """Track values already seen for ``unique=True`` columns across chunks.
+
+    ``memory`` keeps a set per column. ``disk`` uses a temporary SQLite database
+    so peak memory stays flat for high-cardinality identifiers. ``auto`` starts
+    in memory and migrates to SQLite once the number of tracked values exceeds
+    ``limit``.
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: Literal["memory", "disk", "auto"] = "auto",
+        limit: int = 1_000_000,
+        path: str | os.PathLike[str] | None = None,
+    ) -> None:
+        if mode not in {"memory", "disk", "auto"}:
+            raise ValueError("unique_tracking must be one of: memory, disk, auto")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("unique_tracking_limit must be a positive integer")
+        self.mode = mode
+        self.limit = limit
+        self.path = Path(path) if path is not None else None
+        self.storage = "memory" if mode != "disk" else "disk"
+        self.tracked_values = 0
+        self._memory: dict[str, set[str]] | None = {} if mode != "disk" else None
+        self._directory: tempfile.TemporaryDirectory[str] | None = None
+        self._connection: sqlite3.Connection | None = None
+        if mode == "disk":
+            self._enable_disk()
+
+    @staticmethod
+    def _key(value: object) -> str:
+        return f"{type(value).__name__}:{value!r}"
+
+    def _enable_disk(self) -> None:
+        if self._connection is not None:
+            return
+        if self.path is None:
+            self._directory = tempfile.TemporaryDirectory(prefix="udc-unique-")
+            database = Path(self._directory.name) / "seen.sqlite3"
+        else:
+            database = self.path
+            database.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(database)
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS seen ("
+            "column_name TEXT NOT NULL, value TEXT NOT NULL, "
+            "PRIMARY KEY (column_name, value))"
+        )
+        connection.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS current_chunk (value TEXT PRIMARY KEY)"
+        )
+        if self._memory:
+            connection.executemany(
+                "INSERT OR IGNORE INTO seen (column_name, value) VALUES (?, ?)",
+                (
+                    (column, value)
+                    for column, values in self._memory.items()
+                    for value in values
+                ),
+            )
+        connection.commit()
+        self._memory = None
+        self._connection = connection
+        self.storage = "disk"
+
+    def count_across(self, column: str, values: pd.Series) -> int:
+        """Return how many distinct ``values`` were already seen for ``column``."""
+        keys = {self._key(value) for value in values}
+        if not keys:
+            return 0
+        if self._memory is not None:
+            bucket = self._memory.setdefault(column, set())
+            across = len(keys & bucket)
+            new = len(keys) - across
+            bucket.update(keys)
+            self.tracked_values += new
+            if self.mode == "auto" and self.tracked_values > self.limit:
+                self._enable_disk()
+            return across
+
+        connection = self._connection
+        assert connection is not None
+        connection.execute("DELETE FROM current_chunk")
+        connection.executemany(
+            "INSERT OR IGNORE INTO current_chunk (value) VALUES (?)",
+            ((key,) for key in keys),
+        )
+        across_row = connection.execute(
+            "SELECT COUNT(*) FROM current_chunk AS current "
+            "JOIN seen ON current.value = seen.value "
+            "WHERE seen.column_name = ?",
+            (column,),
+        ).fetchone()
+        across = int(across_row[0]) if across_row is not None else 0
+        connection.execute(
+            "INSERT OR IGNORE INTO seen (column_name, value) "
+            "SELECT ?, value FROM current_chunk",
+            (column,),
+        )
+        connection.execute("DELETE FROM current_chunk")
+        connection.commit()
+        return across
+
+    def close(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+        if self._directory is not None:
+            self._directory.cleanup()
+            self._directory = None
+
+
 def _check_unique_values(
     result: pd.DataFrame,
     specs: dict[str, ColumnSpec],
     findings: list[dict[str, object]],
-    seen: dict[str, pd.Index] | None,
+    tracker: _UniqueTracker | None,
 ) -> None:
     """Report duplicate values for ``unique=True`` columns.
 
-    Missing values are ignored, matching the contract check. When ``seen`` is
+    Missing values are ignored, matching the contract check. When ``tracker`` is
     supplied, values from earlier chunks are included so streaming ingestion can
     detect cross-chunk duplicates.
     """
@@ -695,17 +812,9 @@ def _check_unique_values(
         if values.empty:
             continue
         within = int(values.duplicated().sum())
-        previous = seen.get(column) if seen is not None else None
-        current = pd.Index(values.drop_duplicates())
         across = (
-            int(current.isin(previous).sum())
-            if previous is not None and len(previous)
-            else 0
+            tracker.count_across(column, values.drop_duplicates()) if tracker else 0
         )
-        if seen is not None:
-            seen[column] = (
-                current if previous is None else previous.union(current, sort=False)
-            )
         duplicates = within + across
         if duplicates:
             detail = f", including {across} from earlier chunks" if across else ""
@@ -730,7 +839,7 @@ def _ingest_frame(
     format_name: str,
     input_label: str,
     numeric_identifiers: dict[str, int] | None = None,
-    unique_seen: dict[str, pd.Index] | None = None,
+    unique_tracker: _UniqueTracker | None = None,
 ) -> tuple[pd.DataFrame, IngestionReport]:
     """Coerce a string-normalized frame and build the shared audit report."""
     findings: list[dict[str, object]] = []
@@ -787,7 +896,7 @@ def _ingest_frame(
         )
 
     result = pd.DataFrame(parsed_columns, index=frame.index)
-    _check_unique_values(result, specs, findings, unique_seen)
+    _check_unique_values(result, specs, findings, unique_tracker)
     report = IngestionReport(
         source=source,
         rows=len(frame),
@@ -900,6 +1009,9 @@ def iter_csv_safe(
     *,
     chunksize: int = 100_000,
     on_error: IngestionPolicy = "warn",
+    unique_tracking: Literal["memory", "disk", "auto"] = "auto",
+    unique_tracking_limit: int = 1_000_000,
+    unique_tracking_path: str | os.PathLike[str] | None = None,
     **read_csv_kwargs: Any,
 ) -> Iterator[tuple[pd.DataFrame, IngestionReport]]:
     """Read a CSV in chunks, yielding a typed frame and report per chunk.
@@ -924,6 +1036,18 @@ def iter_csv_safe(
         ``"warn"`` logs findings, ``"raise"`` raises
         :class:`IngestionError` on the first failing chunk, and ``"ignore"``
         suppresses logging.
+    unique_tracking:
+        Storage for the values already seen in ``unique=True`` columns.
+        ``"memory"`` is fastest but grows with column cardinality. ``"disk"``
+        uses a temporary SQLite database and keeps peak memory flat. ``"auto"``
+        (default) starts in memory and migrates to disk once more than
+        ``unique_tracking_limit`` values are tracked.
+    unique_tracking_limit:
+        Number of tracked distinct values at which ``"auto"`` switches to disk.
+    unique_tracking_path:
+        Optional path for the SQLite database used by disk tracking. When
+        omitted, a temporary directory is created and removed when the iterator
+        is closed.
     **read_csv_kwargs:
         Extra options passed to :func:`pandas.read_csv`. The same reserved
         string-first options as :func:`read_csv_safe` are rejected.
@@ -939,7 +1063,8 @@ def iter_csv_safe(
     ``ColumnSpec(unique=True)`` is checked within each chunk and against values
     seen in earlier chunks. Missing values are ignored. Cross-chunk tracking
     keeps one entry per distinct value in the unique columns, so its memory grows
-    with cardinality rather than with the number of rows.
+    with cardinality rather than with the number of rows. Use
+    :func:`combine_ingestion_reports` to roll the per-chunk reports up.
     """
     if contract is not None and not isinstance(contract, DataContract):
         raise TypeError("contract must be a DataContract instance or None")
@@ -965,33 +1090,40 @@ def iter_csv_safe(
     )
     label = _source_label(source)
     active_contract = contract
-    unique_seen: dict[str, pd.Index] = {}
-    for raw in reader:
-        frame = _blank_to_na(raw, copy=False)
-        if active_contract is None:
-            typed, report = _ingest_frame(
+    tracker = _UniqueTracker(
+        mode=unique_tracking,
+        limit=unique_tracking_limit,
+        path=unique_tracking_path,
+    )
+    try:
+        for raw in reader:
+            frame = _blank_to_na(raw, copy=False)
+            if active_contract is None:
+                typed, report = _ingest_frame(
+                    frame,
+                    None,
+                    source=label,
+                    sheet=None,
+                    on_error=on_error,
+                    format_name="CSV",
+                    input_label="CSV",
+                    unique_tracker=tracker,
+                )
+                active_contract = DataContract.infer_from(typed, strict=True)
+                yield typed, report
+                continue
+            yield _ingest_frame(
                 frame,
-                None,
+                active_contract,
                 source=label,
                 sheet=None,
                 on_error=on_error,
                 format_name="CSV",
                 input_label="CSV",
-                unique_seen=unique_seen,
+                unique_tracker=tracker,
             )
-            active_contract = DataContract.infer_from(typed, strict=True)
-            yield typed, report
-            continue
-        yield _ingest_frame(
-            frame,
-            active_contract,
-            source=label,
-            sheet=None,
-            on_error=on_error,
-            format_name="CSV",
-            input_label="CSV",
-            unique_seen=unique_seen,
-        )
+    finally:
+        tracker.close()
 
 
 def _excel_cell_to_text(value: object, date_format: str | None) -> object:
@@ -1199,4 +1331,52 @@ def read_excel_safe(
         format_name="Excel",
         input_label="Excel worksheet",
         numeric_identifiers=numeric_identifiers,
+    )
+
+
+def combine_ingestion_reports(
+    reports: Iterable[IngestionReport],
+    *,
+    source: str | None = None,
+) -> IngestionReport:
+    """Roll per-chunk reports into one report for a whole file.
+
+    Parameters
+    ----------
+    reports:
+        Reports yielded by :func:`iter_csv_safe`, in file order. An empty
+        iterable is allowed and produces a report with zero rows.
+    source:
+        Optional label for the combined report. Defaults to the source recorded
+        on the first report.
+
+    Returns
+    -------
+    IngestionReport
+        A report whose ``rows`` is the sum of the chunk sizes, whose findings
+        concatenate every chunk's findings in order, and whose ``columns`` table
+        comes from the first chunk. ``sheet`` is taken from the first report.
+    """
+    items = list(reports)
+    if not items:
+        return IngestionReport(
+            source=source if source is not None else "<empty>",
+            rows=0,
+            columns=pd.DataFrame(columns=_COLUMN_COLUMNS),
+            findings=pd.DataFrame(columns=_INGESTION_COLUMNS),
+            sheet=None,
+        )
+    first = items[0]
+    findings = [report.findings for report in items if not report.findings.empty]
+    combined = (
+        pd.concat(findings, ignore_index=True)
+        if findings
+        else pd.DataFrame(columns=_INGESTION_COLUMNS)
+    )
+    return IngestionReport(
+        source=source if source is not None else first.source,
+        rows=sum(report.rows for report in items),
+        columns=first.columns.copy(deep=True),
+        findings=combined,
+        sheet=first.sheet,
     )

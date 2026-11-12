@@ -12,6 +12,8 @@ column kind is treated.
 | `numeric_imputation` | `"median"` | Numeric fill strategy: `median`, `mean`, or `constant` |
 | `categorical_imputation` | `"mode"` | Categorical fill strategy: `mode` or `constant` |
 | `numeric_fill_value` | `0.0` | Fill value when numeric imputation is `constant` |
+| `preserve_integer_dtypes` | `True` | Keep integral numeric columns as `int64` when imputation and bounds are integral |
+| `on_precision_loss` | `"coerce"` | Policy when `float64` cannot represent a large integer: `"raise"`, `"warn"`, or `"coerce"` |
 | `categorical_fill_value` | `"Unknown"` | Fill value for constant categorical imputation and unseen labels |
 | `cap_outliers` | `False` | Clip numeric values to learned IQR bounds (opt-in) |
 | `outlier_multiplier` | `1.5` | IQR multiplier used for the bounds |
@@ -74,6 +76,36 @@ config = CleanerConfig(
     outlier_columns=(),  # optional per-column allowlist
 )
 ```
+
+### Integer and precision policy
+
+`float64` represents integers exactly only up to `2^53`. The cleaner does not
+silently narrow an integer column: with `preserve_integer_dtypes=True` (the
+default), a column that was integral at `fit` time stays `int64` at `transform`
+time as long as the learned fill value and outlier bounds are also integral.
+Columns with fractional medians, fractional IQR bounds, or non-integral values in
+a batch fall back to `float64` and log that fallback.
+
+When a conversion would be lossy, `on_precision_loss` controls the outcome:
+
+| Value | Behavior |
+| --- | --- |
+| `"coerce"` | Convert to `float64` and continue (default, matching earlier releases) |
+| `"warn"` | Convert to `float64` and log a warning |
+| `"raise"` | Raise `ValueError` before the value is silently rounded |
+
+```python
+config = CleanerConfig(
+    preserve_integer_dtypes=True,
+    on_precision_loss="raise",
+)
+```
+
+The check is exact, not a blanket `> 2^53` test: values such as `2^53 + 2` are
+representable and are preserved, while `2^53 + 1` is not. The decision log
+records a `numeric_precision` entry during `fit` when the policy allows a lossy
+conversion. Store identifiers above `2^53` as text (`role="id"`) when exact
+round-tripping matters; see [Safe ingestion](ingestion.md).
 
 ### Outlier capping
 

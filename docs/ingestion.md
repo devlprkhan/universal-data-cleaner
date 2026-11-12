@@ -135,11 +135,15 @@ not copied into logs.
 chunks instead:
 
 ```python
-from data_cleaner import iter_csv_safe
+from data_cleaner import combine_ingestion_reports, iter_csv_safe
 
+reports = []
 for frame, report in iter_csv_safe("export.csv", contract=contract, chunksize=100_000):
     process(frame)
-    assert report.rows <= 100_000
+    reports.append(report)
+
+whole_file = combine_ingestion_reports(reports)
+print(whole_file.rows, whole_file.success)
 ```
 
 Pass a contract to keep typing consistent across chunks. Without one, the
@@ -153,6 +157,28 @@ The DataFrame copy is bounded by `chunksize` rather than the file size.
 `ColumnSpec(unique=True)` is checked within each chunk and against values seen in
 earlier chunks. Missing values are ignored. The seen-value index keeps one entry
 per distinct value, so its memory grows with cardinality rather than row count.
+
+For high-cardinality identifiers, choose how those seen values are stored:
+
+```python
+iter_csv_safe(
+    "export.csv",
+    contract=contract,
+    unique_tracking="disk",  # "memory", "disk", or "auto" (default)
+    unique_tracking_limit=1_000_000,
+    unique_tracking_path="state/seen.sqlite3",  # optional
+)
+```
+
+`"memory"` is fastest. `"disk"` uses a temporary SQLite database and keeps peak
+memory flat. `"auto"` starts in memory and migrates to disk once more than
+`unique_tracking_limit` distinct values are tracked. When
+`unique_tracking_path` is omitted, the temporary database is deleted when the
+iterator closes.
+
+`combine_ingestion_reports()` sums the chunk row counts, concatenates findings in
+file order, and keeps the first chunk's column table and sheet label. Pass
+`source=` to override the label.
 
 Values that look like integers beyond `2^53` produce an `integer_precision`
 warning when a numeric column is coerced to `float64`, because such identifiers

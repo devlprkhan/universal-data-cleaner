@@ -21,6 +21,7 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`DataContract`](#data_cleaner.DataContract) | Declare column roles, allowed values, ranges, patterns, and uniqueness |
 | [`read_csv_safe`](#data_cleaner.read_csv_safe) | Read CSV as text, coerce under a contract, and audit the conversion |
 | [`iter_csv_safe`](#data_cleaner.iter_csv_safe) | Stream a large CSV in typed chunks with one audit report per chunk |
+| [`combine_ingestion_reports`](#data_cleaner.combine_ingestion_reports) | Roll per-chunk reports into one whole-file report |
 | [`read_excel_safe`](#data_cleaner.read_excel_safe) | Read one Excel sheet with the same guards and audit report |
 | [`CleanerReport`](#data_cleaner.CleanerReport) | Combine profile, contract, validation, ingestion, and decisions for one batch |
 | [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
@@ -60,6 +61,8 @@ incrementally.
 ::: data_cleaner.read_csv_safe
 
 ::: data_cleaner.iter_csv_safe
+
+::: data_cleaner.combine_ingestion_reports
 
 ::: data_cleaner.read_excel_safe
 

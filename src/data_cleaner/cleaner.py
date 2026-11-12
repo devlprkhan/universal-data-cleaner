@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -24,6 +26,12 @@ from .contract import DataContract, DriftReport
 from .decisions import DECISION_COLUMNS, CleaningDecision
 
 LOGGER = logging.getLogger(__name__)
+
+#: Magnitude above which ``float64`` cannot represent every integer exactly.
+_MAX_EXACT_FLOAT_INT = 2**53
+
+#: Runtime dependencies whose major version is checked when loading an artifact.
+_TRACKED_ENVIRONMENT = ("pandas", "numpy", "scikit_learn")
 
 
 class ArtifactCompatibilityError(RuntimeError):
@@ -117,6 +125,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         self.outlier_counts_: dict[str, int] = {}
         self.outlier_quartiles_: dict[str, tuple[float, float]] = {}
         self.known_categories_: dict[str, frozenset | None] = {}
+        self.numeric_dtypes_: dict[str, str] = {}
 
         self._fit_numeric(prepared, roles)
         self._fit_boolean(prepared)
@@ -210,11 +219,44 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Apply learned cleaning rules without fitting anything."""
+        """Apply learned cleaning rules without fitting anything.
+
+        The findings for this batch are also stored on the instance and can be
+        read with :meth:`drift_report`. That attribute is per-instance
+        last-transform state, so concurrent calls can overwrite it. Use
+        :meth:`transform_with_report` when you need the report that belongs to
+        exactly one batch.
+        """
+        cleaned, report = self._transform(X)
+        self.drift_report_ = report.findings
+        return cleaned
+
+    def transform_with_report(
+        self, X: pd.DataFrame
+    ) -> tuple[pd.DataFrame, DriftReport]:
+        """Clean ``X`` and return the frame together with its drift report.
+
+        Unlike :meth:`transform`, this method does not read or write the shared
+        ``drift_report_`` state, so it is safe to call concurrently on one
+        fitted cleaner from multiple threads or batch workers.
+
+        Parameters
+        ----------
+        X:
+            Inference batch. It is never mutated and no rows are dropped.
+
+        Returns
+        -------
+        tuple[pandas.DataFrame, DriftReport]
+            The cleaned frame and the contract findings for this batch.
+        """
+        return self._transform(X)
+
+    def _transform(self, X: pd.DataFrame) -> tuple[pd.DataFrame, DriftReport]:
+        """Shared implementation for the public transform entry points."""
         self._ensure_fitted()
         frame = self._validate_frame(X, required=None, allow_empty=True)
         report = self._contract_report(frame)
-        self.drift_report_ = report.findings
         missing = [
             column for column in self.feature_names_in_ if column not in frame.columns
         ]
@@ -239,14 +281,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         prepared, missing_flags, _ = self._prepare_frame(frame, self.roles_)
 
         for column in self.numeric_columns_:
-            numeric_series = prepared[column].astype("float64")
-            fill = self.fill_values_[column]
-            lower, upper = self.outlier_bounds_[column]
-            prepared[column] = (
-                numeric_series.fillna(fill)
-                .clip(lower=lower, upper=upper)
-                .astype("float64")
-            )
+            prepared[column] = self._clean_numeric(column, prepared[column])
 
         for column in self.boolean_columns_:
             boolean_series = prepared[column].astype("boolean")
@@ -282,7 +317,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             raise RuntimeError(
                 f"Internal error: expected cleaned columns missing: {missing_output}"
             )
-        return prepared.reindex(columns=self.columns_)
+        return prepared.reindex(columns=self.columns_), report
 
     def fit_transform(self, X: pd.DataFrame, y: object | None = None) -> pd.DataFrame:
         """Fit on ``X`` and return the cleaned training DataFrame."""
@@ -503,7 +538,13 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             LOGGER.warning("Schema drift detected:\n%s", report.summary())
 
     def save(self, path: str | Path) -> Path:
-        """Persist the fitted cleaner and its manifest as a joblib artifact."""
+        """Persist the fitted cleaner and its manifest as a joblib artifact.
+
+        The artifact is written to a temporary file in the destination
+        directory, read back to validate it, and then atomically moved into
+        place with :func:`os.replace`. An interrupted or failed save never
+        leaves a truncated artifact at ``path``, and partial files are removed.
+        """
         self._ensure_fitted()
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -519,7 +560,23 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             "fingerprint": self.training_fingerprint_,
             "cleaner": self,
         }
-        joblib.dump(payload, target, compress=3)
+
+        handle, temporary_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            dir=target.parent,
+        )
+        os.close(handle)
+        temporary = Path(temporary_name)
+        try:
+            joblib.dump(payload, temporary, compress=3)
+            written = joblib.load(temporary)
+            if not isinstance(written, dict) or "cleaner" not in written:
+                raise ValueError("Written artifact failed validation")
+            os.replace(temporary, target)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         return target
 
     @classmethod
@@ -529,6 +586,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         verify_version: bool = True,
         *,
         allow_incompatible: bool = False,
+        strict_environment: bool = False,
     ) -> DataCleaner:
         """Load a saved cleaner artifact and restore its manifest.
 
@@ -537,8 +595,16 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         ``allow_incompatible=True`` to load them with a warning, or
         ``verify_version=False`` to skip the compatibility check entirely.
         ``joblib.load`` uses pickle, so only load artifacts you trust.
+
+        The manifest records the pandas, NumPy, and scikit-learn versions used
+        when the artifact was written. A major-version mismatch logs a warning
+        by default; pass ``strict_environment=True`` to raise
+        :class:`ArtifactCompatibilityError` instead.
         """
-        payload = joblib.load(Path(path))
+        try:
+            payload = joblib.load(Path(path))
+        except Exception as exc:
+            raise ValueError(f"Artifact could not be read: {exc}") from exc
         if not isinstance(payload, dict) or "cleaner" not in payload:
             raise ValueError("File is not a valid DataCleaner artifact")
         cleaner = payload["cleaner"]
@@ -595,6 +661,9 @@ class DataCleaner(TransformerMixin, BaseEstimator):
             manifest = None
         cleaner.artifact_manifest_ = manifest
 
+        if verify_version and manifest is not None:
+            cls._check_environment(manifest, strict=strict_environment)
+
         if not hasattr(cleaner, "decisions_"):
             LOGGER.warning("Artifact has no decision log; decision_log() will be empty")
             cleaner.decisions_ = []
@@ -605,6 +674,33 @@ class DataCleaner(TransformerMixin, BaseEstimator):
         if not hasattr(cleaner, "training_fingerprint_"):
             cleaner.training_fingerprint_ = payload.get("fingerprint")
         return cleaner
+
+    @staticmethod
+    def _check_environment(manifest: dict[str, object], *, strict: bool) -> None:
+        """Warn or fail when recorded runtime majors differ from the current ones."""
+        environment = manifest.get("environment")
+        if not isinstance(environment, dict):
+            return
+        current = package_versions()
+        mismatches = []
+        for name in _TRACKED_ENVIRONMENT:
+            recorded = environment.get(name)
+            if recorded is None:
+                continue
+            if _major_version(recorded) != _major_version(current.get(name)):
+                mismatches.append(f"{name} {recorded} (current {current.get(name)})")
+        if not mismatches:
+            return
+        message = (
+            "Artifact was created with a different runtime environment: "
+            + "; ".join(mismatches)
+        )
+        if strict:
+            raise ArtifactCompatibilityError(
+                f"{message}. Retrain and save with the current environment, or "
+                "pass strict_environment=False to load it with a warning."
+            )
+        LOGGER.warning(message)
 
     def _ensure_fitted(self) -> None:
         check_is_fitted(self, attributes=["columns_"])
@@ -779,8 +875,115 @@ class DataCleaner(TransformerMixin, BaseEstimator):
 
     @staticmethod
     def _coerce_numeric(series: pd.Series) -> pd.Series:
-        numeric = pd.to_numeric(series, errors="coerce").astype("float64")
+        numeric = pd.to_numeric(series, errors="coerce")
+        if ptypes.is_integer_dtype(numeric):
+            return numeric
+        numeric = numeric.astype("float64")
         return numeric.replace([np.inf, -np.inf], np.nan)
+
+    @staticmethod
+    def _lossy_integer_count(series: pd.Series) -> int:
+        """Count integral values that ``float64`` cannot represent exactly."""
+        numeric = pd.to_numeric(series, errors="coerce").dropna()
+        if numeric.empty:
+            return 0
+        values = numeric.to_numpy()
+        if ptypes.is_integer_dtype(numeric):
+            candidates = values[np.abs(values.astype("float64")) > _MAX_EXACT_FLOAT_INT]
+            return sum(
+                1 for item in candidates.tolist() if int(float(item)) != int(item)
+            )
+        if not ptypes.is_float_dtype(numeric):
+            return 0
+        integral = np.mod(values, 1) == 0
+        beyond = np.abs(values) > _MAX_EXACT_FLOAT_INT
+        return int((integral & beyond).sum())
+
+    @staticmethod
+    def _fits_signed_int64(series: pd.Series) -> bool:
+        """Return whether an integer series can be held in a nullable ``Int64``."""
+        if ptypes.is_unsigned_integer_dtype(series):
+            valid = series.dropna()
+            return valid.empty or int(valid.max()) <= np.iinfo(np.int64).max
+        return True
+
+    @staticmethod
+    def _as_integer_series(series: pd.Series) -> pd.Series | None:
+        """Return an exact nullable-integer view of ``series`` when possible."""
+        numeric = pd.to_numeric(series, errors="coerce")
+        if ptypes.is_integer_dtype(numeric):
+            if not DataCleaner._fits_signed_int64(numeric):
+                return None
+            return numeric.astype("Int64")
+        if not ptypes.is_float_dtype(numeric):
+            return None
+        valid = numeric.dropna()
+        if valid.empty:
+            return numeric.astype("Int64")
+        values = valid.to_numpy()
+        if not bool((np.mod(values, 1) == 0).all()):
+            return None
+        limit = float(np.iinfo(np.int64).max) + 1.0
+        if bool((values >= limit).any()) or bool((values < -limit).any()):
+            return None
+        return numeric.astype("Int64")
+
+    def _handle_precision_loss(self, column: str, count: int, *, at_fit: bool) -> None:
+        """Apply the configured policy when a float conversion would be lossy."""
+        if self.config.preserve_integer_dtypes:
+            hint = (
+                "Use integral imputation values and outlier bounds to keep "
+                "them as integers"
+            )
+        else:
+            hint = (
+                "Set CleanerConfig(preserve_integer_dtypes=True) to keep them "
+                "as integers"
+            )
+        message = (
+            f"Column '{column}' has {count} integer value(s) that float64 "
+            f"cannot represent exactly (magnitude above 2^53). {hint}, or use "
+            "on_precision_loss='raise' to fail instead of continuing."
+        )
+        policy = self.config.on_precision_loss
+        if policy == "raise":
+            raise ValueError(message)
+        if policy == "warn":
+            LOGGER.warning(message)
+        if at_fit:
+            self._record(
+                column,
+                "numeric_precision",
+                "float64 conversion may lose precision for large integers",
+                "learned",
+                count,
+                self.numeric_dtypes_.get(column),
+            )
+
+    def _clean_numeric(self, column: str, series: pd.Series) -> pd.Series:
+        """Apply learned imputation and bounds, preserving integer dtype if safe."""
+        fill = self.fill_values_[column]
+        lower, upper = self.outlier_bounds_[column]
+        if self.numeric_dtypes_.get(column) == "int64":
+            integer = self._as_integer_series(series)
+            if integer is not None and float(fill).is_integer():
+                filled = integer.fillna(int(fill))
+                if np.isfinite(lower):
+                    filled = filled.clip(lower=int(lower))
+                if np.isfinite(upper):
+                    filled = filled.clip(upper=int(upper))
+                return filled.astype("int64")
+            LOGGER.warning(
+                "Column '%s' was fitted as integer but contains non-integral or "
+                "out-of-range values; falling back to float64 for this batch",
+                column,
+            )
+
+        lossy = self._lossy_integer_count(series)
+        if lossy:
+            self._handle_precision_loss(column, lossy, at_fit=False)
+        numeric = series.astype("float64")
+        return numeric.fillna(fill).clip(lower=lower, upper=upper).astype("float64")
 
     @staticmethod
     def _as_float(values: pd.Series) -> pd.Series:
@@ -868,12 +1071,16 @@ class DataCleaner(TransformerMixin, BaseEstimator):
     def _fit_numeric(self, prepared: pd.DataFrame, roles: dict[str, str]) -> None:
         cfg = self.config
         for column in self.numeric_columns_:
-            series = prepared[column].astype("float64")
-            valid = series.dropna()
+            source = prepared[column]
+            numeric = pd.to_numeric(source, errors="coerce")
+            valid = numeric.dropna()
+            valid_float = valid.astype("float64") if not valid.empty else valid
             if cfg.numeric_imputation == "median":
-                fill = valid.median() if not valid.empty else cfg.numeric_fill_value
+                fill = (
+                    valid_float.median() if not valid.empty else cfg.numeric_fill_value
+                )
             elif cfg.numeric_imputation == "mean":
-                fill = valid.mean() if not valid.empty else cfg.numeric_fill_value
+                fill = valid_float.mean() if not valid.empty else cfg.numeric_fill_value
             else:
                 fill = cfg.numeric_fill_value
 
@@ -885,7 +1092,7 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 fill = cfg.numeric_fill_value
 
             if column in roles:
-                missing = int(series.isna().sum())
+                missing = int(numeric.isna().sum())
                 imputation_source = (
                     "config" if cfg.numeric_imputation == "constant" else "learned"
                 )
@@ -908,13 +1115,15 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                 cap_enabled and roles.get(column) == "numeric" and not valid.empty
             )
             if should_cap:
-                q1 = float(valid.quantile(0.25))
-                q3 = float(valid.quantile(0.75))
+                q1 = float(valid_float.quantile(0.25))
+                q3 = float(valid_float.quantile(0.75))
                 iqr = q3 - q1
                 if iqr > 0:
                     lower = q1 - cfg.outlier_multiplier * iqr
                     upper = q3 + cfg.outlier_multiplier * iqr
-                    outliers = int(((valid < lower) | (valid > upper)).sum())
+                    outliers = int(
+                        ((valid_float < lower) | (valid_float > upper)).sum()
+                    )
                     self._record(
                         column,
                         "cap_outliers",
@@ -933,8 +1142,33 @@ class DataCleaner(TransformerMixin, BaseEstimator):
                         None,
                     )
 
-            cleaned = series.fillna(fill).clip(lower=lower, upper=upper)
-            prepared[column] = cleaned.astype("float64")
+            integral_bounds = (
+                not np.isfinite(lower) or float(lower).is_integer()
+            ) and (not np.isfinite(upper) or float(upper).is_integer())
+            preserve = (
+                cfg.preserve_integer_dtypes
+                and ptypes.is_integer_dtype(numeric)
+                and not valid.empty
+                and float(fill).is_integer()
+                and integral_bounds
+                and self._fits_signed_int64(numeric)
+            )
+            if preserve:
+                cleaned_int = numeric.astype("Int64").fillna(int(fill))
+                if np.isfinite(lower):
+                    cleaned_int = cleaned_int.clip(lower=int(lower))
+                if np.isfinite(upper):
+                    cleaned_int = cleaned_int.clip(upper=int(upper))
+                self.numeric_dtypes_[column] = "int64"
+                prepared[column] = cleaned_int.astype("int64")
+            else:
+                self.numeric_dtypes_[column] = "float64"
+                lossy = self._lossy_integer_count(numeric)
+                if lossy:
+                    self._handle_precision_loss(column, lossy, at_fit=True)
+                cleaned = numeric.astype("float64")
+                cleaned = cleaned.fillna(fill).clip(lower=lower, upper=upper)
+                prepared[column] = cleaned.astype("float64")
             self.fill_values_[column] = fill
             self.outlier_bounds_[column] = (lower, upper)
             self.outlier_counts_[column] = outliers

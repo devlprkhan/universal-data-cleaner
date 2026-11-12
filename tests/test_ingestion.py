@@ -13,6 +13,7 @@ from data_cleaner import (
     DataContract,
     IngestionError,
     IngestionReport,
+    combine_ingestion_reports,
     iter_csv_safe,
     read_csv_safe,
 )
@@ -374,3 +375,91 @@ class SafeCsvIngestionTests(unittest.TestCase):
         frame, report = read_csv_safe(io.StringIO(csv), on_error="ignore")
         self.assertTrue(pd.api.types.is_float_dtype(frame["big"]))
         self.assertIn("integer_precision", set(report.findings["check"]))
+
+
+class StreamingUniquenessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.contract = DataContract(
+            columns=(ColumnSpec("id", role="numeric", unique=True),)
+        )
+        self.csv = "id\n1\n2\n1\n3\n"
+
+    def _duplicate_counts(self, **kwargs: object) -> list[int]:
+        chunks = list(
+            iter_csv_safe(
+                io.StringIO(self.csv),
+                contract=self.contract,
+                chunksize=2,
+                on_error="ignore",
+                **kwargs,  # type: ignore[arg-type]
+            )
+        )
+        counts = []
+        for _, report in chunks:
+            findings = report.findings
+            duplicates = findings[findings["check"] == "duplicate_values"]
+            counts.append(int(duplicates["count"].sum()))
+        return counts
+
+    def test_disk_tracking_detects_cross_chunk_duplicates(self) -> None:
+        self.assertEqual(self._duplicate_counts(unique_tracking="disk"), [0, 1])
+
+    def test_auto_tracking_migrates_and_still_detects_duplicates(self) -> None:
+        self.assertEqual(
+            self._duplicate_counts(unique_tracking="auto", unique_tracking_limit=1),
+            [0, 1],
+        )
+
+    def test_disk_tracking_uses_the_requested_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "nested" / "seen.sqlite3"
+            counts = self._duplicate_counts(
+                unique_tracking="disk", unique_tracking_path=database
+            )
+            self.assertEqual(counts, [0, 1])
+            self.assertTrue(database.exists())
+
+    def test_invalid_tracking_options_are_rejected(self) -> None:
+        for kwargs in (
+            {"unique_tracking": "bogus"},
+            {"unique_tracking_limit": 0},
+            {"unique_tracking_limit": True},
+        ):
+            with self.assertRaises(ValueError):
+                list(
+                    iter_csv_safe(
+                        io.StringIO(self.csv),
+                        contract=self.contract,
+                        **kwargs,
+                    )
+                )
+
+    def test_combine_ingestion_reports_rolls_up_chunks(self) -> None:
+        reports = [
+            report
+            for _, report in iter_csv_safe(
+                io.StringIO(self.csv),
+                contract=self.contract,
+                chunksize=2,
+                on_error="ignore",
+            )
+        ]
+
+        combined = combine_ingestion_reports(reports)
+
+        self.assertEqual(combined.rows, 4)
+        self.assertEqual(combined.source, reports[0].source)
+        self.assertEqual(
+            len(combined.findings),
+            sum(len(report.findings) for report in reports),
+        )
+        self.assertIn("duplicate_values", set(combined.findings["check"]))
+        self.assertEqual(list(combined.columns["column"]), ["id"])
+
+    def test_combine_ingestion_reports_handles_an_empty_batch(self) -> None:
+        combined = combine_ingestion_reports([], source="empty.csv")
+        self.assertEqual(combined.rows, 0)
+        self.assertEqual(combined.source, "empty.csv")
+        self.assertTrue(combined.findings.empty)
+        self.assertTrue(combined.columns.empty)
+        self.assertTrue(combined.success)

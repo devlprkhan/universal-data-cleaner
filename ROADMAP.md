@@ -209,12 +209,14 @@ rehearsal before the larger `2.10.0`.
 
 Exit criteria:
 
-- [ ] All Phase 1 items complete.
-- [ ] Concurrent `transform()` calls return independent reports.
-- [ ] Numeric precision and infinity/NaN policies tested at boundaries.
-- [ ] Artifact writes are atomic and dependency compatibility is enforced.
-- [ ] Chunked uniqueness tracking has a bounded/disk-backed mode.
-- [ ] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
+- [x] All Phase 1 items complete.
+- [x] Concurrent `transform()` calls return independent reports.
+- [x] Numeric precision and infinity/NaN policies tested at boundaries.
+- [x] Artifact writes are atomic and dependency compatibility is enforced.
+- [x] Chunked uniqueness tracking has a bounded/disk-backed mode.
+- [x] Full gate, pandas 3.x, minimum dependencies, installed wheel, and docs pass.
+      Verified on PR #43 (2026-11-12): lint, typecheck, tests 3.10–3.13, compat
+      (minimum, latest, pandas 3), build, installed wheel, docs, and `ci-success`.
 - [ ] Post-publication provenance verification passes.
 
 ### `2.11.0` — Large data and performance
@@ -281,8 +283,9 @@ Status legend: `[ ]` not started · `[~]` partially done · `[x]` done.
 
 ### Phase 1 — Production correctness (P0/P1)
 
-**Execution tracker: in progress.** Several workstreams are partially
-addressed; the checkboxes below are authoritative.
+**Execution tracker: implementation complete in `2.10.0`; release verification
+in progress.** Several workstreams are partially addressed; the checkboxes below
+are authoritative.
 
 #### 1. Verify actual PyPI provenance
 
@@ -303,13 +306,13 @@ Do not claim otherwise; prove it on the next release.
 
 #### 2. Make transformation reporting concurrency-safe
 
-- [ ] Introduce a request-specific transformation result that returns the output
+- [x] Introduce a request-specific transformation result that returns the output
       frame and its drift report together.
-- [ ] Eliminate reliance on the shared last-transform drift state for batch
+- [x] Eliminate reliance on the shared last-transform drift state for batch
       findings.
-- [ ] Keep `transform()` backward compatible and document the concurrency
+- [x] Keep `transform()` backward compatible and document the concurrency
       contract.
-- [ ] Add concurrent execution tests.
+- [x] Add concurrent execution tests.
 
 Target shape (name to be finalized in an ADR):
 
@@ -322,30 +325,31 @@ documented as per-instance state, not a concurrency-safe batch result.
 
 #### 3. Harden numerical correctness
 
-- [ ] Detect precision loss in numeric conversions.
-- [ ] Preserve integer and nullable integer dtypes where possible.
-- [ ] Add explicit `raise`, `warn`, and `coerce` precision policies.
-- [ ] Test infinity, NaN, very large integers, and boundary values around `2^53`.
+- [x] Detect precision loss in numeric conversions.
+- [x] Preserve integer and nullable integer dtypes where possible.
+- [x] Add explicit `raise`, `warn`, and `coerce` precision policies.
+- [x] Test infinity, NaN, very large integers, and boundary values around `2^53`.
 
 #### 4. Harden artifact persistence
 
 - [x] Enforce artifact format and library-major compatibility.
-- [ ] Implement atomic artifact writes: temp file, validation, `os.replace`,
+- [x] Implement atomic artifact writes: temp file, validation, `os.replace`,
       cleanup after failure.
-- [ ] Enforce compatibility with the recorded runtime dependency environment.
-- [ ] Define and document the compatibility policy.
-- [ ] Test corruption, truncation, and interrupted writes.
-- [ ] Keep the pickle trust boundary explicit; evaluate `skops.io` for untrusted
-      artifacts.
+- [x] Enforce compatibility with the recorded runtime dependency environment.
+- [x] Define and document the compatibility policy.
+- [x] Test corruption, truncation, and interrupted writes.
+- [x] Keep the pickle trust boundary explicit; evaluate `skops.io` for untrusted
+      artifacts. Evaluated for `2.10.0`; not adopted in the 2.x line, and the
+      trust boundary is documented in [Artifacts](artifacts.md).
 
 #### 5. Harden chunked ingestion
 
 - [x] Infer the schema once and reuse it across chunks.
 - [x] Check `ColumnSpec(unique=True)` within and across chunks.
-- [ ] Bound memory used by cross-chunk uniqueness tracking.
-- [ ] Add disk-backed tracking for high-cardinality identifiers.
-- [ ] Aggregate chunk reports correctly.
-- [ ] Define supported streaming semantics and their limits.
+- [x] Bound memory used by cross-chunk uniqueness tracking.
+- [x] Add disk-backed tracking for high-cardinality identifiers.
+- [x] Aggregate chunk reports correctly.
+- [x] Define supported streaming semantics and their limits.
 
 ### Phase 2 — Large-data and performance engineering (P1/P2)
 
