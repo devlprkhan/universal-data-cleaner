@@ -113,6 +113,7 @@ nav:
       - Validation, joins & dedup: validation-joins.md
       - ML split audit: ml-split-audit.md
       - Production guide: production.md
+      - Performance and large data: performance.md
   - Reference:
       - API reference: api.md
       - Artifacts & reproducibility: artifacts.md

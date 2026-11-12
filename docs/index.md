@@ -149,8 +149,9 @@ else.** Do not create a second cleaner for test or production data.
 | Area | Included |
 | --- | --- |
 | Cleaning | Numeric coercion, median / mean / constant imputation, IQR capping, categorical mode / constant imputation, boolean coercion, datetime parsing and calendar features, missing indicators, constant-column dropping |
-| Ingestion | Safe CSV and Excel reads with contract-driven coercion, identifier protection, date/boolean guards, and an ingestion report |
+| Ingestion | Safe CSV, Excel, and optional Parquet reads with contract-driven coercion, identifier protection, date/boolean guards, and an ingestion report |
 | Reporting | `CleanerReport` combining profile, contract drift, validation, ingestion, and decisions, plus a `data-cleaner audit` CLI |
+| Large data | Seeded benchmark suite, peak-memory measurement, chunked transformation with aggregated reports, and a documented supported workload |
 | Safety | Declarative and inferred contracts, drift reports, expectations, join diagnostics, referential integrity, business-key dedup, and train/test split audits |
 | Operations | Decision logs, manifests, stable fingerprints, joblib save / load, and scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility |
 
@@ -211,7 +212,7 @@ the contract and manifest next to the model.
 </div>
 <div class="doc-links__row" markdown>
 [Safe ingestion](ingestion.md)
-<span class="doc-links__desc">Read CSV or Excel with an audit trail.</span>
+<span class="doc-links__desc">Read CSV, Excel, or Parquet with an audit trail.</span>
 </div>
 <div class="doc-links__row" markdown>
 [Batch reporting](reporting.md)
@@ -228,6 +229,10 @@ the contract and manifest next to the model.
 <div class="doc-links__row" markdown>
 [Production guide](production.md)
 <span class="doc-links__desc">Deploy the same rules safely.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Performance and large data](performance.md)
+<span class="doc-links__desc">Benchmarks, memory, chunked workflows.</span>
 </div>
 </div>
 <div markdown>

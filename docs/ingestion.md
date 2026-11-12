@@ -180,6 +180,39 @@ iterator closes.
 file order, and keeps the first chunk's column table and sheet label. Pass
 `source=` to override the label.
 
+## Parquet
+
+Parquet ingestion is optional and requires PyArrow:
+
+```bash
+pip install "universal-data-cleaner[parquet]"
+```
+
+```python
+from data_cleaner import iter_parquet_safe, read_parquet_safe
+
+frame, report = read_parquet_safe("orders.parquet", contract=contract)
+
+for frame, report in iter_parquet_safe(
+    "orders.parquet", contract=contract, batch_size=100_000
+):
+    process(frame)
+```
+
+Both readers apply the same contract-driven audit as the CSV readers, so
+findings are comparable across formats. Parquet already carries column types,
+but the audit normalizes numeric columns to `float64` just like CSV input; the
+cleaner preserves integer dtypes again where it safely can. Store identifiers as
+text when you write the file: an identifier written as a number has already lost
+its leading zeros before the reader sees it.
+
+`iter_parquet_safe()` reads one PyArrow record batch at a time and rewrites the
+batch index so concatenated batches preserve row order. Cross-batch uniqueness
+uses the same `unique_tracking` options as `iter_csv_safe()`.
+
+See [Performance and large data](performance.md) for measured throughput and
+memory behavior.
+
 Values that look like integers beyond `2^53` produce an `integer_precision`
 warning when a numeric column is coerced to `float64`, because such identifiers
 may already be losing precision. Store large identifiers as text (`role="id"` or

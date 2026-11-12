@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -98,15 +99,16 @@ class ColumnSpec:
         return cls(**data)  # type: ignore[arg-type]
 
 
-@dataclass(eq=False)
-class DriftReport:
-    """Container for column-contract findings produced during ``transform``."""
+class _FindingsMixin:
+    """Shared read-only views over a findings table.
+
+    Subclasses store their findings in ``self.findings``. The mixin keeps the
+    single-batch :class:`DriftReport` and the aggregated
+    :class:`TransformReport` behaviorally identical, so policies written for one
+    work with the other.
+    """
 
     findings: pd.DataFrame
-
-    @classmethod
-    def empty(cls) -> DriftReport:
-        return cls(pd.DataFrame(columns=_DRIFT_COLUMNS))
 
     @property
     def has_drift(self) -> bool:
@@ -155,6 +157,90 @@ class DriftReport:
         """Raise ``ValueError`` when at least one error-severity finding exists."""
         if self.has_errors:
             raise ValueError(f"{message}:\n{self.summary()}")
+
+
+@dataclass(eq=False)
+class DriftReport(_FindingsMixin):
+    """Column-contract findings for a single ``transform`` batch.
+
+    ``rows`` is the number of rows in the batch that produced these findings. It
+    lets :func:`combine_drift_reports` reconstruct a run-level row count without
+    holding on to the cleaned frames.
+    """
+
+    findings: pd.DataFrame
+    rows: int = 0
+
+    @classmethod
+    def empty(cls) -> DriftReport:
+        return cls(pd.DataFrame(columns=_DRIFT_COLUMNS), rows=0)
+
+
+@dataclass(eq=False)
+class TransformReport(_FindingsMixin):
+    """Aggregated findings for a chunked transform run.
+
+    Returned by :func:`combine_drift_reports`. It exposes the same ``has_drift``,
+    ``errors``, ``warnings``, ``summary()``, and ``raise_if_errors()`` surface as
+    :class:`DriftReport`, plus the total row and chunk counts.
+    """
+
+    findings: pd.DataFrame
+    rows: int = 0
+    chunks: int = 0
+
+    @classmethod
+    def empty(cls) -> TransformReport:
+        return cls(pd.DataFrame(columns=_DRIFT_COLUMNS), rows=0, chunks=0)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-friendly summary of the aggregated run."""
+        return {
+            "rows": self.rows,
+            "chunks": self.chunks,
+            "has_drift": self.has_drift,
+            "has_errors": self.has_errors,
+            "findings": [dict(record) for record in self.findings.to_dict("records")],
+        }
+
+
+def combine_drift_reports(reports: Iterable[DriftReport]) -> TransformReport:
+    """Roll per-chunk :class:`DriftReport` objects into one run-level report.
+
+    Parameters
+    ----------
+    reports:
+        Reports from :meth:`DataCleaner.transform_chunks` or
+        :meth:`DataCleaner.transform_with_report`, in chunk order. An empty
+        iterable is allowed.
+
+    Returns
+    -------
+    TransformReport
+        Findings concatenated in chunk order, with summed ``rows`` and the number
+        of chunks. The aggregated report is the right object to log or persist
+        for a whole batch job; individual chunk reports remain independent.
+
+    Notes
+    -----
+    Findings are concatenated, not deduplicated: two chunks with the same drift
+    produce two rows. That keeps the aggregate faithful to what happened per
+    chunk and lets downstream code count occurrences by summing.
+    """
+    items = list(reports)
+    if not items:
+        return TransformReport.empty()
+    frames = [report.findings for report in items if not report.findings.empty]
+    findings = (
+        pd.concat(frames, ignore_index=True)
+        if frames
+        else pd.DataFrame(columns=_DRIFT_COLUMNS)
+    )
+    return TransformReport(
+        findings=findings,
+        rows=sum(int(report.rows) for report in items),
+        chunks=len(items),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,7 +482,9 @@ class DataContract:
                         }
                     )
 
-        return DriftReport(pd.DataFrame(findings, columns=_DRIFT_COLUMNS))
+        return DriftReport(
+            pd.DataFrame(findings, columns=_DRIFT_COLUMNS), rows=len(frame)
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable representation of the contract."""

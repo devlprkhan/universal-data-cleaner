@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universal-data-cleaner"
-version = "2.10.0"
+version = "2.11.0"
 description = "Production-ready, scikit-learn-compatible data cleaning transformer for pandas."
 readme = "README.md"
 license = "MIT"
@@ -45,6 +45,7 @@ dependencies = [
 
 [project.optional-dependencies]
 excel = ["openpyxl>=3.1"]
+parquet = ["pyarrow>=14"]
 
 [project.urls]
 Homepage = "https://github.com/devlprkhan/universal-data-cleaner"
@@ -70,6 +71,7 @@ dev = [
     "openpyxl>=3.1",
     "pandas-stubs>=2.3.3.260113",
     "pre-commit>=4.6.2",
+    "pyarrow>=14",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]
@@ -88,7 +90,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-src = ["src", "tests"]
+src = ["src", "tests", "benchmarks"]
 extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
@@ -111,7 +113,7 @@ warn_unreachable = true
 show_error_codes = true
 ignore_missing_imports = true
 mypy_path = "src"
-files = ["src", "tests"]
+files = ["src", "tests", "benchmarks"]
 
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "yaml", "joblib.*"]

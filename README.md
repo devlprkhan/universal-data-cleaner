@@ -24,12 +24,13 @@ The docs site is the central reference. This README is the short entry point.
 | [Leak-safe workflow](https://devlprkhan.github.io/universal-data-cleaner/leak-safe-workflow/) | The fit/transform contract and common mistakes |
 | [Cleaning data](https://devlprkhan.github.io/universal-data-cleaner/cleaning/) | Config, roles, imputation, outliers, datetimes |
 | [Contracts & drift](https://devlprkhan.github.io/universal-data-cleaner/contracts/) | `ColumnSpec`, `DataContract`, drift checks |
-| [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV and Excel reads with ingestion reports |
+| [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV, Excel, and Parquet reads with ingestion reports |
 | [Batch reporting](https://devlprkhan.github.io/universal-data-cleaner/reporting/) | `CleanerReport` and the `data-cleaner audit` CLI |
 | [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/) | Expectations, join diagnostics, integrity, dedup |
 | [ML split audit](https://devlprkhan.github.io/universal-data-cleaner/ml-split-audit/) | Duplicate, group, temporal, and target leakage |
 | [Artifacts & reproducibility](https://devlprkhan.github.io/universal-data-cleaner/artifacts/) | Decision log, manifests, fingerprints, save/load |
 | [Production guide](https://devlprkhan.github.io/universal-data-cleaner/production/) | Deployment checklist and failure modes |
+| [Performance and large data](https://devlprkhan.github.io/universal-data-cleaner/performance/) | Benchmarks, memory guidance, chunked workflows |
 | [API reference](https://devlprkhan.github.io/universal-data-cleaner/api/) | Generated from the package docstrings |
 | [Changelog](https://devlprkhan.github.io/universal-data-cleaner/changelog/) | Release notes |
 | [Upcoming](https://devlprkhan.github.io/universal-data-cleaner/upcoming/) | What ships next and what is out of scope |
@@ -111,13 +112,15 @@ for the full explanation.
 - boolean coercion and imputation
 - datetime parsing plus calendar feature extraction
 - optional missing-value indicators and constant-column dropping
-- safe CSV and Excel ingestion with contract-driven coercion, identifier
-  protection, date and boolean guards, and an audit report
+- safe CSV, Excel, and optional Parquet ingestion with contract-driven coercion,
+  identifier protection, date and boolean guards, and an audit report
 - `CleanerReport` combining profile, contract drift, validation, ingestion, and
   cleaner decisions, plus a `data-cleaner audit` CLI
 - declarative contracts with roles, allowed values, ranges, patterns, and uniqueness
 - automatic train-schema contract inference, transform-time drift reports, and
   `transform_with_report()` for concurrency-safe batch reporting
+- chunked transformation with `transform_chunks()` and run-level report
+  aggregation through `combine_drift_reports()`
 - expectation checks and validation reports
 - join diagnostics, referential integrity, and audited business-key dedup
 - train/test split audits for duplicate, group, temporal, and target leakage
@@ -126,6 +129,29 @@ for the full explanation.
 - scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility
 - stable output schema and column order; inputs are never mutated and inference
   rows are never dropped
+
+## Large data
+
+`transform()` keeps one batch in memory. For files that do not fit, stream chunks
+and aggregate the reports:
+
+```python
+from data_cleaner import combine_drift_reports, iter_csv_safe
+
+clean_reports = []
+for chunk, _ in iter_csv_safe("events.csv", contract=contract, chunksize=100_000):
+    cleaned, drift = cleaner.transform_with_report(chunk)
+    clean_reports.append(drift)
+    write_batch(cleaned)
+
+report = combine_drift_reports(clean_reports)
+report.raise_if_errors()
+```
+
+Parquet input is available with the `parquet` extra (`pyarrow`). Measured
+throughput, memory guidance, and the supported workload are in
+[Performance and large data](https://devlprkhan.github.io/universal-data-cleaner/performance/);
+the reproducible suite lives in `benchmarks/`.
 
 ## Development
 

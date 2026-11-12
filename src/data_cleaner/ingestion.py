@@ -71,6 +71,19 @@ _RESERVED_EXCEL_KWARGS = {
     "true_values",
 }
 
+_RESERVED_PARQUET_KWARGS = {
+    "columns",
+    "dtype",
+    "dtype_backend",
+    "engine",
+    "use_nullable_dtypes",
+}
+
+_PARQUET_HINT = (
+    "Parquet ingestion requires PyArrow. Install the optional extra with "
+    '`pip install "universal-data-cleaner[parquet]"`.'
+)
+
 _CURRENCY_CHARS = "€£¥₹₽₩¢$"
 _NUMBER_RE = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
 _INTEGER_RE = re.compile(r"^[+-]?\d+$")
@@ -1332,6 +1345,191 @@ def read_excel_safe(
         input_label="Excel worksheet",
         numeric_identifiers=numeric_identifiers,
     )
+
+
+def read_parquet_safe(
+    source: str | os.PathLike[str] | IO[Any],
+    contract: DataContract | None = None,
+    *,
+    on_error: IngestionPolicy = "warn",
+    **read_parquet_kwargs: Any,
+) -> tuple[pd.DataFrame, IngestionReport]:
+    """Read a Parquet file, coerce it under a contract, and audit it.
+
+    Requires PyArrow, installed with the ``parquet`` extra:
+
+    ```bash
+    pip install "universal-data-cleaner[parquet]"
+    ```
+
+    Parameters
+    ----------
+    source:
+        Path or file-like object accepted by :func:`pandas.read_parquet`.
+    contract:
+        Optional :class:`~data_cleaner.DataContract`. Declared columns use their
+        role, dtype, and date format. Undeclared columns are inferred and
+        reported as ``undeclared_column``.
+    on_error:
+        ``"warn"`` logs error findings and returns the frame (default),
+        ``"raise"`` raises :class:`IngestionError` when an error finding exists,
+        and ``"ignore"`` suppresses logging.
+    **read_parquet_kwargs:
+        Extra options passed to :func:`pandas.read_parquet`. Options that would
+        bypass the audit or the declared schema (``columns``, ``dtype``,
+        ``dtype_backend``, ``engine``, ``use_nullable_dtypes``) are rejected.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, IngestionReport]
+        The audited frame and its report.
+
+    Notes
+    -----
+    Parquet already carries column types, but this reader applies the same
+    contract-driven audit as :func:`read_csv_safe` so ingestion reports are
+    comparable across formats. Numeric columns are normalized to ``float64``
+    during that audit, exactly like CSV input; the cleaner preserves integer
+    dtypes again where it can. Identifiers stored as numbers in Parquet have
+    already lost their leading zeros, so store identifiers as text at write time.
+
+    This function reads the whole file into memory. For large files, use
+    :func:`iter_parquet_safe`, which streams record batches.
+    """
+    if contract is not None and not isinstance(contract, DataContract):
+        raise TypeError("contract must be a DataContract instance or None")
+    if on_error not in {"warn", "raise", "ignore"}:
+        raise ValueError("on_error must be one of: warn, raise, ignore")
+
+    conflicts = sorted(_RESERVED_PARQUET_KWARGS.intersection(read_parquet_kwargs))
+    if conflicts:
+        raise TypeError(
+            "read_parquet_safe manages these read_parquet options itself: "
+            f"{', '.join(conflicts)}"
+        )
+
+    try:
+        frame = pd.read_parquet(source, engine="pyarrow", **read_parquet_kwargs)
+    except ImportError as exc:
+        raise ImportError(_PARQUET_HINT) from exc
+    return _ingest_frame(
+        frame,
+        contract,
+        source=_source_label(source),
+        sheet=None,
+        on_error=on_error,
+        format_name="Parquet",
+        input_label="Parquet file",
+    )
+
+
+def iter_parquet_safe(
+    source: str | os.PathLike[str] | IO[Any],
+    contract: DataContract | None = None,
+    *,
+    batch_size: int = 100_000,
+    on_error: IngestionPolicy = "warn",
+    unique_tracking: Literal["memory", "disk", "auto"] = "auto",
+    unique_tracking_limit: int = 1_000_000,
+    unique_tracking_path: str | os.PathLike[str] | None = None,
+    **read_parquet_kwargs: Any,
+) -> Iterator[tuple[pd.DataFrame, IngestionReport]]:
+    """Stream a Parquet file as audited batches.
+
+    Requires PyArrow. This is the memory-aware counterpart to
+    :func:`read_parquet_safe`: it reads one record batch at a time, so peak
+    memory tracks ``batch_size`` rather than the whole file.
+
+    Parameters
+    ----------
+    source:
+        Path or seekable file-like object accepted by
+        :class:`pyarrow.parquet.ParquetFile`.
+    contract:
+        Optional :class:`~data_cleaner.DataContract`. Without one, the schema is
+        inferred from the first batch and reused for every later batch.
+    batch_size:
+        Rows per batch. Must be a positive integer.
+    on_error:
+        ``"warn"`` logs findings, ``"raise"`` raises on the first failing batch,
+        and ``"ignore"`` suppresses logging.
+    unique_tracking, unique_tracking_limit, unique_tracking_path:
+        Same semantics as :func:`iter_csv_safe`. Cross-batch uniqueness is
+        checked for ``ColumnSpec(unique=True)`` columns.
+    **read_parquet_kwargs:
+        Extra options accepted by
+        :meth:`pyarrow.parquet.ParquetFile.iter_batches`, such as
+        ``use_threads``. Options that select or retype columns are rejected.
+
+    Yields
+    ------
+    tuple[pandas.DataFrame, IngestionReport]
+        One audited batch and its report. Batch indexes are continuous across
+        the file, so concatenating the frames preserves row order.
+    """
+    if contract is not None and not isinstance(contract, DataContract):
+        raise TypeError("contract must be a DataContract instance or None")
+    if on_error not in {"warn", "raise", "ignore"}:
+        raise ValueError("on_error must be one of: warn, raise, ignore")
+    if (
+        isinstance(batch_size, bool)
+        or not isinstance(batch_size, int)
+        or batch_size <= 0
+    ):
+        raise ValueError("batch_size must be a positive integer")
+
+    conflicts = sorted(_RESERVED_PARQUET_KWARGS.intersection(read_parquet_kwargs))
+    if conflicts:
+        raise TypeError(
+            "iter_parquet_safe manages these Parquet options itself: "
+            f"{', '.join(conflicts)}"
+        )
+
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise ImportError(_PARQUET_HINT) from exc
+
+    label = _source_label(source)
+    parquet = pq.ParquetFile(source)
+    active_contract = contract
+    tracker = _UniqueTracker(
+        mode=unique_tracking,
+        limit=unique_tracking_limit,
+        path=unique_tracking_path,
+    )
+    offset = 0
+    try:
+        for batch in parquet.iter_batches(batch_size=batch_size, **read_parquet_kwargs):
+            frame = batch.to_pandas()
+            frame.index = pd.RangeIndex(offset, offset + len(frame))
+            offset += len(frame)
+            if active_contract is None:
+                typed, report = _ingest_frame(
+                    frame,
+                    None,
+                    source=label,
+                    sheet=None,
+                    on_error=on_error,
+                    format_name="Parquet",
+                    input_label="Parquet file",
+                    unique_tracker=tracker,
+                )
+                active_contract = DataContract.infer_from(typed, strict=True)
+                yield typed, report
+                continue
+            yield _ingest_frame(
+                frame,
+                active_contract,
+                source=label,
+                sheet=None,
+                on_error=on_error,
+                format_name="Parquet",
+                input_label="Parquet file",
+                unique_tracker=tracker,
+            )
+    finally:
+        tracker.close()
 
 
 def combine_ingestion_reports(
