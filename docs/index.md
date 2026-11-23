@@ -151,6 +151,8 @@ else.** Do not create a second cleaner for test or production data.
 | Cleaning | Numeric coercion, median / mean / constant imputation, IQR capping, categorical mode / constant imputation, boolean coercion, datetime parsing and calendar features, missing indicators, constant-column dropping |
 | Ingestion | Safe CSV, Excel, and optional Parquet reads with contract-driven coercion, identifier protection, date/boolean guards, and an ingestion report |
 | Reporting | `CleanerReport` combining profile, contract drift, validation, ingestion, and decisions, plus a `data-cleaner audit` CLI |
+| Validation | Expectations plus cross-column, conditional, grouped, combination-uniqueness, and arithmetic rules with bounded, privacy-safe row diagnostics |
+| Drift | Statistical drift against a reusable reference profile: PSI, Wasserstein distance, missingness and category deltas, plus a JSON Lines batch history |
 | Large data | Seeded benchmark suite, peak-memory measurement, chunked transformation with aggregated reports, and a documented supported workload |
 | Safety | Declarative and inferred contracts, drift reports, expectations, join diagnostics, referential integrity, business-key dedup, and train/test split audits |
 | Operations | Decision logs, manifests, stable fingerprints, joblib save / load, and scikit-learn `Pipeline`, `clone`, and `get_feature_names_out` compatibility |
@@ -209,6 +211,10 @@ the contract and manifest next to the model.
 <div class="doc-links__row" markdown>
 [Contracts & drift](contracts.md)
 <span class="doc-links__desc">Make schema assumptions explicit.</span>
+</div>
+<div class="doc-links__row" markdown>
+[Statistical drift](drift.md)
+<span class="doc-links__desc">Compare batches with PSI and Wasserstein distance.</span>
 </div>
 <div class="doc-links__row" markdown>
 [Safe ingestion](ingestion.md)

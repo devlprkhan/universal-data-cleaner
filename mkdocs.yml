@@ -108,6 +108,7 @@ nav:
   - Guides:
       - Cleaning data: cleaning.md
       - Contracts & drift: contracts.md
+      - Statistical drift: drift.md
       - Safe ingestion: ingestion.md
       - Batch reporting: reporting.md
       - Validation, joins & dedup: validation-joins.md

@@ -5,12 +5,14 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
 from ._roles import _normalize_kind, _series_kind
+from ._serialization import json_records
 
 Severity = Literal["error", "warning"]
 
@@ -22,6 +24,8 @@ _VALIDATION_COLUMNS = [
     "message",
     "observed",
 ]
+
+_DIAGNOSTIC_COLUMNS = ["expectation", "column", "row_position", "index", "value"]
 
 _BROAD_DTYPE_ALIASES = {
     "numeric",
@@ -66,6 +70,29 @@ class ValidationResult:
             "message": self.message,
             "observed": self.observed,
         }
+
+
+class Validatable(Protocol):
+    """Anything :func:`validate` can evaluate.
+
+    The built-in :class:`Expectation` and the composable rules in
+    :mod:`data_cleaner.rules` implement this protocol. A custom object only needs
+    ``name``, ``column``, ``severity``, and ``check(frame)``; ``check`` may return
+    one :class:`ValidationResult` or a list of them.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def column(self) -> str | None: ...
+
+    @property
+    def severity(self) -> Severity: ...
+
+    def check(
+        self, frame: pd.DataFrame
+    ) -> ValidationResult | list[ValidationResult]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +165,15 @@ class Expectation:
     def check(self, frame: pd.DataFrame) -> ValidationResult:
         """Evaluate this expectation against ``frame``."""
         return _CHECKERS[self.name](self, frame)
+
+    def failing_mask(self, frame: pd.DataFrame) -> pd.Series | None:
+        """Return a boolean row mask for failing rows, when it is well-defined.
+
+        ``None`` means the expectation is frame-level (row count or dtype) or
+        references a missing column, so row diagnostics cannot attribute the
+        failure to individual rows.
+        """
+        return _MASKERS[self.name](self, frame)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly representation of the expectation."""
@@ -376,6 +412,77 @@ _CHECKERS: dict[str, Callable[[Expectation, pd.DataFrame], ValidationResult]] = 
 }
 
 
+def _mask_not_null(expectation: Expectation, frame: pd.DataFrame) -> pd.Series | None:
+    if _missing_column(expectation, frame) is not None:
+        return None
+    return frame[_column(expectation)].isna()
+
+
+def _mask_unique(expectation: Expectation, frame: pd.DataFrame) -> pd.Series | None:
+    if _missing_column(expectation, frame) is not None:
+        return None
+    series = frame[_column(expectation)]
+    return series.duplicated(keep="first") & series.notna()
+
+
+def _mask_in_set(expectation: Expectation, frame: pd.DataFrame) -> pd.Series | None:
+    if _missing_column(expectation, frame) is not None:
+        return None
+    series = frame[_column(expectation)]
+    return series.notna() & ~series.isin(list(expectation.values or ()))
+
+
+def _mask_between(expectation: Expectation, frame: pd.DataFrame) -> pd.Series | None:
+    if _missing_column(expectation, frame) is not None:
+        return None
+    series = frame[_column(expectation)]
+    numeric = pd.to_numeric(series, errors="coerce")
+    outside = pd.Series(False, index=series.index)
+    if expectation.lower is not None:
+        outside |= (
+            numeric <= expectation.lower
+            if not expectation.inclusive
+            else numeric < expectation.lower
+        )
+    if expectation.upper is not None:
+        outside |= (
+            numeric >= expectation.upper
+            if not expectation.inclusive
+            else numeric > expectation.upper
+        )
+    return (series.notna() & numeric.isna()) | outside
+
+
+def _mask_matches_pattern(
+    expectation: Expectation, frame: pd.DataFrame
+) -> pd.Series | None:
+    if _missing_column(expectation, frame) is not None:
+        return None
+    pattern = expectation.pattern
+    if pattern is None:  # pragma: no cover - guarded by __post_init__
+        return None
+    series = frame[_column(expectation)]
+    matches = series.astype(str).str.fullmatch(pattern).fillna(False)
+    return series.notna() & ~matches
+
+
+def _mask_frame_level(
+    expectation: Expectation, frame: pd.DataFrame
+) -> pd.Series | None:
+    return None
+
+
+_MASKERS: dict[str, Callable[[Expectation, pd.DataFrame], pd.Series | None]] = {
+    "not_null": _mask_not_null,
+    "unique": _mask_unique,
+    "in_set": _mask_in_set,
+    "between": _mask_between,
+    "matches_pattern": _mask_matches_pattern,
+    "has_dtype": _mask_frame_level,
+    "row_count_between": _mask_frame_level,
+}
+
+
 def not_null(column: str, *, severity: Severity = "error") -> Expectation:
     """Expect ``column`` to contain no missing values."""
     return Expectation(name="not_null", column=column, severity=severity)
@@ -452,14 +559,68 @@ def row_count_between(
 
 
 @dataclass(eq=False)
+class RowDiagnostics:
+    """A bounded, privacy-safe sample of failing rows.
+
+    ``rows`` has one record per sampled failure with the expectation name, the
+    column, the positional row number, and the index label. Values are excluded
+    by default; when :meth:`ValidationReport.diagnose` is called with
+    ``include_values=True`` they are truncated to ``max_value_length`` characters.
+    ``truncated`` is true when at least one rule had more failing rows than the
+    sampling limit. ``skipped`` lists rules whose failures cannot be attributed
+    to individual rows, such as frame-level row-count checks or grouped rules.
+    """
+
+    rows: pd.DataFrame
+    truncated: bool = False
+    skipped: tuple[str, ...] = ()
+
+    @property
+    def empty(self) -> bool:
+        """Whether no rows were sampled."""
+        return self.rows.empty
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-friendly representation of the sample."""
+        return {
+            "rows": json_records(self.rows),
+            "truncated": self.truncated,
+            "skipped": list(self.skipped),
+        }
+
+    def to_markdown(self) -> str:
+        """Render the sample as Markdown."""
+        if self.rows.empty:
+            return "No failing rows were sampled."
+        try:
+            table = self.rows.to_markdown(index=False)
+        except ImportError:  # tabulate is optional
+            table = "```\n" + self.rows.to_string(index=False) + "\n```"
+        note = " Values were omitted." if self.rows["value"].isna().all() else ""
+        suffix = " The sample is truncated." if self.truncated else ""
+        return f"{table}\n\n{note}{suffix}".strip()
+
+
+@dataclass(eq=False)
 class ValidationReport:
-    """Container for expectation results or contract findings."""
+    """Container for expectation results or contract findings.
+
+    ``sources`` keeps the evaluated expectations and rules so
+    :meth:`diagnose` can attribute failures to rows. Reports built from contract
+    findings have no sources and therefore produce an empty sample.
+    """
 
     results: pd.DataFrame
     source: str = "expectations"
+    sources: tuple[Validatable, ...] = ()
 
     @classmethod
-    def from_results(cls, results: Sequence[ValidationResult]) -> ValidationReport:
+    def from_results(
+        cls,
+        results: Sequence[ValidationResult],
+        *,
+        sources: tuple[Validatable, ...] = (),
+    ) -> ValidationReport:
         """Build a report from individual results."""
         return cls(
             pd.DataFrame(
@@ -467,6 +628,7 @@ class ValidationReport:
                 columns=_VALIDATION_COLUMNS,
             ),
             source="expectations",
+            sources=sources,
         )
 
     @classmethod
@@ -558,24 +720,130 @@ class ValidationReport:
         if not self.success:
             raise ValueError(f"{message}:\n{self.summary()}")
 
+    def diagnose(
+        self,
+        frame: pd.DataFrame,
+        *,
+        limit: int = 5,
+        include_values: bool = False,
+        include_index: bool = True,
+        max_value_length: int = 32,
+    ) -> RowDiagnostics:
+        """Sample a bounded set of failing rows for this report.
+
+        Parameters
+        ----------
+        frame:
+            The frame the report was produced from. It is never modified.
+        limit:
+            Maximum sampled rows per failing expectation or rule.
+        include_values:
+            Include the failing value for rules that target a single column.
+            Values are off by default because they may contain personal data.
+        include_index:
+            Include the frame index label for sampled rows. Labels are off by
+            default when the index may contain identifiers; set this to ``False``
+            to return positions only.
+        max_value_length:
+            Truncate included values to this many characters.
+
+        Returns
+        -------
+        RowDiagnostics
+            Sampled rows, whether any sample was truncated, and the rules that
+            could not be attributed to rows.
+        """
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError("frame must be a pandas DataFrame")
+        if not isinstance(limit, int) or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        if not isinstance(max_value_length, int) or max_value_length < 1:
+            raise ValueError("max_value_length must be a positive integer")
+        if not self.failures.empty:
+            failed = {str(value) for value in self.failures["expectation"]}
+        else:
+            failed = set()
+
+        records: list[dict[str, object]] = []
+        truncated = False
+        skipped: list[str] = []
+        for source in self.sources:
+            name = getattr(source, "name", None)
+            if not isinstance(name, str) or name not in failed:
+                continue
+            masker = getattr(source, "failing_mask", None)
+            if not callable(masker):
+                skipped.append(name)
+                continue
+            mask = masker(frame)
+            if mask is None:
+                skipped.append(name)
+                continue
+            raw = np.asarray(mask)
+            if raw.shape != (len(frame),):
+                raise ValueError(
+                    f"rule '{source.name}' returned a mask of the wrong length"
+                )
+            aligned = pd.Series(raw, index=frame.index).fillna(False).astype(bool)
+            positions = np.flatnonzero(aligned.to_numpy())
+            if positions.size > limit:
+                truncated = True
+            column = getattr(source, "column", None)
+            if hasattr(source, "value_column"):
+                value_column = getattr(source, "value_column", None)
+            else:
+                value_column = column
+            if not isinstance(value_column, str) or value_column not in frame.columns:
+                value_column = None
+            for position in positions[:limit]:
+                value: str | None = None
+                if include_values and value_column is not None:
+                    text = str(frame[value_column].iloc[position])
+                    value = text[:max_value_length]
+                records.append(
+                    {
+                        "expectation": name,
+                        "column": column,
+                        "row_position": int(position),
+                        "index": frame.index[position] if include_index else None,
+                        "value": value,
+                    }
+                )
+        return RowDiagnostics(
+            pd.DataFrame(records, columns=_DIAGNOSTIC_COLUMNS),
+            truncated=truncated,
+            skipped=tuple(skipped),
+        )
+
 
 def validate(
     frame: pd.DataFrame,
-    expectations: Expectation | Sequence[Expectation],
+    expectations: Validatable | Sequence[Validatable],
 ) -> ValidationReport:
-    """Evaluate one or more expectations against ``frame``.
+    """Evaluate one or more expectations or rules against ``frame``.
 
     Warning-severity failures are reported but do not make the report fail.
+    Custom objects that implement :class:`Validatable` are accepted, and a rule
+    may return several results from one ``check`` call.
     """
     if not isinstance(frame, pd.DataFrame):
         raise TypeError("frame must be a pandas DataFrame")
-    items = (
-        (expectations,)
-        if isinstance(expectations, Expectation)
-        else tuple(expectations)
-    )
+    single = callable(getattr(expectations, "check", None))
+    items: tuple[Validatable, ...]
+    if single:
+        items = (cast(Validatable, expectations),)
+    else:
+        items = tuple(cast(Sequence[Validatable], expectations))
     if not items:
         raise ValueError("At least one expectation is required")
-    return ValidationReport.from_results(
-        [expectation.check(frame) for expectation in items]
-    )
+    results: list[ValidationResult] = []
+    for item in items:
+        checker = getattr(item, "check", None)
+        if not callable(checker):
+            raise TypeError("expectations must provide a check(frame) method")
+        outcome = checker(frame)
+        if isinstance(outcome, ValidationResult):
+            results.append(outcome)
+        else:
+            results.extend(outcome)
+    return ValidationReport.from_results(results, sources=tuple(items))

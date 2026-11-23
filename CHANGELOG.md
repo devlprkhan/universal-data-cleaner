@@ -7,6 +7,74 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-11-23
+
+### Added
+
+- `DriftPolicy`, `DriftProfile`, `DistributionDriftReport`, and
+  `compare_distributions()` add reference-versus-current statistical drift.
+  Reports cover PSI over reference quantile bins, an approximate 1-D Wasserstein
+  distance from bounded reference quantiles plus a scale-free ratio, missingness
+  deltas, category share deltas, and an `other` bucket for levels outside the
+  retained reference categories. Numeric and datetime columns are supported;
+  booleans compare as categorical.
+- `DriftPolicy` documents and validates thresholds: PSI `0.10`/`0.25`, a
+  `5` percentage-point missingness warning, a `10` percentage-point category
+  warning, an optional Wasserstein ratio threshold, and `min_sample=20`, which
+  downgrades errors to warnings on small batches. Thresholds must be finite and
+  non-negative and counts must be integers; policies serialize to and from JSON.
+- `DriftProfile.from_frame()` stores a bounded, JSON-serializable reference
+  summary (bin edges, shares, scales, exactly 512 midpoint quantiles per numeric
+  column, and the top 20 category levels per categorical column), so the same
+  reference can be reused or persisted without retaining a sorted column.
+  `to_json()` / `from_json()` round-trip the profile and its policy, and the
+  default `repr` is redacted.
+- `data_cleaner.rules` adds composable validation rules: `col()` conditions with
+  explicit `.eq`, `.ne`, `.lt`, `.le`, `.gt`, `.ge`, `.isin`, `.not_in`,
+  `.between`, `.isna`, `.notna`, and `.matches` methods; `&`, `|`, and `~`
+  composition; `row_rule()` for cross-column predicates; `conditional()` for
+  scoped rules; `grouped()` for per-group checks; `unique_combination()` for
+  multi-key uniqueness; and `sum_equals()` for arithmetic consistency.
+  Comparisons skip missing operands, so nulls do not fail a predicate unless it
+  asks for them with `.isna()`.
+- `Validatable` is the public protocol behind `validate()`. `validate()` accepts
+  expectations, rules, custom objects with `name`, `column`, `severity`, and
+  `check(frame)`, and mixed lists. A custom rule may return several
+  `ValidationResult` objects from one check.
+- `ValidationReport.diagnose(frame, limit=5, include_values=False,
+  include_index=True, max_value_length=32)` samples failing rows with
+  `RowDiagnostics`: bounded per failing rule, no cell values by default,
+  truncated values when enabled, index labels optionally omitted, and only
+  failing frame-level or grouped rules listed in `skipped`.
+- `JsonlReportSink` appends `CleanerReport`, `DistributionDriftReport`, or mapping
+  records to a JSON Lines file, reads them back in order, summarizes batch
+  history, and exposes `drift_against_previous()`, which reuses the stored
+  reference profile and policy for a reproducible historical comparison.
+  `history()` and `latest(kind=..., source=...)` query the audit trail.
+
+### Changed
+
+- `ValidationReport` gains `sources` and `from_results(..., sources=...)` so
+  diagnostics can attribute failures. Reports built from contract findings have
+  no sources and produce an empty diagnostic sample.
+- JSON-safe conversion is shared by reporting, drift, and sinks. Drift profiles
+  and reports now serialize NaN and infinity as `null` and leak no non-standard
+  JSON literals.
+- `DriftProfile` requires a non-empty reference and current frame with unique
+  string column labels, reports missing or kind-changed columns as errors with
+  metrics skipped, and never mutates the caller's frames.
+- `sum_equals()` now fails rows with present non-numeric components or targets
+  instead of silently skipping them, and `JsonlReportSink` reads records with
+  `split("\n")` so Unicode line separators in metadata cannot corrupt history.
+
+### Documentation
+
+- New [Statistical drift](https://devlprkhan.github.io/universal-data-cleaner/drift/)
+  guide covering policy, thresholds, profiles, report fields, batch history,
+  privacy, and scope.
+- [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/)
+  documents the rule layer, the custom validation protocol, and row diagnostics.
+
 ## [2.11.0] - 2026-11-13
 
 ### Added

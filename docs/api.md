@@ -27,7 +27,9 @@ from data_cleaner import DataCleaner, audit_split, validate
 | [`iter_parquet_safe`](#data_cleaner.iter_parquet_safe) | Stream a large Parquet file in audited record batches |
 | [`combine_drift_reports`](#data_cleaner.combine_drift_reports) | Roll per-chunk drift reports into one run-level `TransformReport` |
 | [`CleanerReport`](#data_cleaner.CleanerReport) | Combine profile, contract, validation, ingestion, and decisions for one batch |
-| [`validate`](#data_cleaner.validate) | Evaluate reusable expectations against a DataFrame |
+| [`validate`](#data_cleaner.validate) | Evaluate reusable expectations and rules against a DataFrame |
+| [`compare_distributions`](#data_cleaner.compare_distributions) | Compare a batch against a reference distribution with PSI and Wasserstein distance |
+| [`JsonlReportSink`](#data_cleaner.JsonlReportSink) | Keep an append-only batch history and compare against a stored reference |
 | [`audit_split`](#data_cleaner.audit_split) | Check a train/test split for leakage before training |
 
 The usual path is `CleanerConfig` → `DataCleaner.fit()` → `DataCleaner.transform()`.
@@ -106,6 +108,52 @@ dependency.
 ::: data_cleaner.has_dtype
 
 ::: data_cleaner.row_count_between
+
+## Validation rules
+
+::: data_cleaner.Validatable
+
+::: data_cleaner.Condition
+
+::: data_cleaner.ColumnRef
+
+::: data_cleaner.col
+
+::: data_cleaner.row_rule
+
+::: data_cleaner.PredicateRule
+
+::: data_cleaner.conditional
+
+::: data_cleaner.ConditionalRule
+
+::: data_cleaner.grouped
+
+::: data_cleaner.GroupedRule
+
+::: data_cleaner.unique_combination
+
+::: data_cleaner.UniqueCombinationRule
+
+::: data_cleaner.sum_equals
+
+::: data_cleaner.SumEqualsRule
+
+::: data_cleaner.RowDiagnostics
+
+## Statistical drift
+
+::: data_cleaner.DriftPolicy
+
+::: data_cleaner.DriftProfile
+
+::: data_cleaner.DistributionDriftReport
+
+::: data_cleaner.compare_distributions
+
+## Report sinks
+
+::: data_cleaner.JsonlReportSink
 
 ## Joins and integrity
 
