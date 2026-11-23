@@ -24,9 +24,10 @@ The docs site is the central reference. This README is the short entry point.
 | [Leak-safe workflow](https://devlprkhan.github.io/universal-data-cleaner/leak-safe-workflow/) | The fit/transform contract and common mistakes |
 | [Cleaning data](https://devlprkhan.github.io/universal-data-cleaner/cleaning/) | Config, roles, imputation, outliers, datetimes |
 | [Contracts & drift](https://devlprkhan.github.io/universal-data-cleaner/contracts/) | `ColumnSpec`, `DataContract`, drift checks |
+| [Statistical drift](https://devlprkhan.github.io/universal-data-cleaner/drift/) | PSI, Wasserstein distance, missingness and category deltas, batch history |
 | [Safe ingestion](https://devlprkhan.github.io/universal-data-cleaner/ingestion/) | Contract-driven CSV, Excel, and Parquet reads with ingestion reports |
 | [Batch reporting](https://devlprkhan.github.io/universal-data-cleaner/reporting/) | `CleanerReport` and the `data-cleaner audit` CLI |
-| [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/) | Expectations, join diagnostics, integrity, dedup |
+| [Validation, joins & dedup](https://devlprkhan.github.io/universal-data-cleaner/validation-joins/) | Expectations, cross-column and conditional rules, join diagnostics, dedup |
 | [ML split audit](https://devlprkhan.github.io/universal-data-cleaner/ml-split-audit/) | Duplicate, group, temporal, and target leakage |
 | [Artifacts & reproducibility](https://devlprkhan.github.io/universal-data-cleaner/artifacts/) | Decision log, manifests, fingerprints, save/load |
 | [Production guide](https://devlprkhan.github.io/universal-data-cleaner/production/) | Deployment checklist and failure modes |
@@ -121,7 +122,10 @@ for the full explanation.
   `transform_with_report()` for concurrency-safe batch reporting
 - chunked transformation with `transform_chunks()` and run-level report
   aggregation through `combine_drift_reports()`
-- expectation checks and validation reports
+- expectation checks and validation reports, plus cross-column, conditional, and
+  grouped rules with bounded, privacy-safe failing-row diagnostics
+- statistical drift against a reusable reference profile: PSI, Wasserstein
+  distance, missingness and category deltas, and a JSON Lines batch history
 - join diagnostics, referential integrity, and audited business-key dedup
 - train/test split audits for duplicate, group, temporal, and target leakage
 - joblib save / load with atomic writes, manifests, runtime compatibility

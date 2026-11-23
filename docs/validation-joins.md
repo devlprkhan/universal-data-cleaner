@@ -64,6 +64,148 @@ report.raise_if_failed()
 `has_dtype()` accepts broad kinds (`numeric`, `categorical`, `boolean`,
 `datetime`) or exact dtypes such as `float64`.
 
+## Cross-column, conditional, and grouped rules
+
+Expectations check one column or the frame size. The rule layer covers the rest:
+row predicates over several columns, rules that apply only when a condition
+holds, and per-group checks. Rules implement the same `Validatable` protocol as
+expectations, so they mix freely in one `validate()` call.
+
+```python
+from data_cleaner import (
+    col,
+    conditional,
+    grouped,
+    row_rule,
+    sum_equals,
+    unique_combination,
+    validate,
+)
+
+report = validate(
+    orders,
+    [
+        row_rule(
+            col("shipped_at").ge(col("ordered_at")),
+            name="shipped_after_ordered",
+        ),
+        conditional(col("status").eq("shipped"), not_null("shipped_at")),
+        grouped("region", row_rule(col("total").gt(0))),
+        unique_combination(["customer_id", "order_date"]),
+        sum_equals(["subtotal", "tax"], "total", tolerance=0.01),
+    ],
+)
+```
+
+| Helper | Checks |
+| --- | --- |
+| `row_rule(condition)` | Every row satisfies the condition |
+| `conditional(condition, rule)` | `rule` holds for the rows matching `condition`; other rows are not evaluated |
+| `grouped(by, rule)` | `rule` holds independently inside each group |
+| `unique_combination(columns)` | The combination of non-null keys is unique |
+| `sum_equals(columns, target, tolerance=1e-9)` | The numeric sum of `columns` equals `target` per row |
+
+Build conditions from `col(name)` with explicit methods:
+
+```python
+col("amount").gt(0)
+col("status").isin(["new", "paid", "shipped"])
+col("amount").between(0, 100_000, inclusive=False)
+col("email").matches(r"[^@]+@[^@]+\.[^@]+")
+col("shipped_at").isna()
+```
+
+Combine them with `&`, `|`, and `~`:
+
+```python
+condition = col("status").isin(["shipped", "delivered"]) & ~col("carrier").isna()
+```
+
+The comparison methods are `.eq`, `.ne`, `.lt`, `.le`, `.gt`, and `.ge`. Both
+sides may be values or another `col(...)`. Using `==` or `!=` on `col()` raises
+`TypeError` with a pointer to `.eq()` / `.ne()`; Python cannot intercept `and`,
+`or`, and `not`, so use `&`, `|`, and `~`.
+
+Rows where either operand is missing are skipped by comparisons, so missing data
+does not fail a predicate unless you ask for it with `col(...).isna()`.
+Membership, bounds, and pattern rules follow the same rule: non-null values are
+checked.
+
+`conditional()` passes when no row matches the condition and reports that
+nothing was checked. `grouped()` reports the number of failing groups; group
+labels are omitted by default, and `include_groups=True` lists up to `max_groups`
+of them (default `10`) because labels can contain personal data.
+
+### Write your own rule
+
+`validate()` accepts any object with `name`, `column`, `severity`, and
+`check(frame)`. `check()` returns one `ValidationResult` or a list of them, which
+lets a custom rule emit several findings from one pass:
+
+```python
+import pandas as pd
+
+from data_cleaner import ValidationResult, validate
+
+
+class NoFutureDates:
+    name = "no_future_dates"
+    column = "created_at"
+    severity = "error"
+
+    def check(self, frame):
+        later = frame["created_at"] > pd.Timestamp.now()
+        return ValidationResult(
+            self.name,
+            self.column,
+            not later.any(),
+            self.severity,
+            f"{int(later.sum())} row(s) are in the future",
+            int(later.sum()),
+        )
+
+
+validate(orders, NoFutureDates())
+```
+
+`Expectation` and the built-in rules implement this protocol, so typed custom
+rules and built-ins can be stored in the same list.
+
+## Row diagnostics
+
+When a rule fails, `ValidationReport.diagnose()` samples a bounded set of failing
+rows. It is opt-in, per-rule bounded, and omits cell values by default.
+
+```python
+report = validate(orders, [not_null("email"), unique("order_id")])
+
+diagnostics = report.diagnose(orders, limit=5)
+diagnostics.rows  # expectation, column, row_position, index, value
+diagnostics.truncated  # True when a rule had more failures than `limit`
+diagnostics.skipped  # failing rules that cannot be attributed to individual rows
+diagnostics.to_markdown()
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `limit` | `5` | Maximum sampled rows per failing rule |
+| `include_values` | `False` | Include the failing value for single-column rules |
+| `include_index` | `True` | Include the frame index label for sampled rows |
+| `max_value_length` | `32` | Truncate included values to this many characters |
+
+Cell values are off by default because they may contain personal data, and even
+when enabled they are truncated. Index labels are treated separately: they are
+included by default because they point at the failing row, but pass
+`include_index=False` when the index can contain identifiers. `row_position` is
+the positional row number; `index` is the frame's index label or `None`.
+
+Only failing rules are sampled. Frame-level checks (`has_dtype`,
+`row_count_between`) and grouped rules cannot be attributed to individual rows,
+so they are listed in `skipped` instead of being guessed at.
+
+`diagnose()` does not modify the frame. A report produced from contract findings
+has no rule sources, so `diagnose()` returns an empty sample for it.
+
 ## Validate against a contract
 
 Contracts can validate a batch directly and return the same report type:

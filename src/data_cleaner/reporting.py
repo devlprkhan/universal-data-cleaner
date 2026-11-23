@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
 from typing import IO, Any
 
 import numpy as np
 import pandas as pd
 
+from ._serialization import json_safe as _json_safe
 from ._version import __version__
 from .contract import DataContract, DriftReport
 from .decisions import DECISION_COLUMNS
@@ -44,43 +43,6 @@ _PROFILE_COLUMNS = [
     "top",
     "top_freq",
 ]
-
-
-def _json_safe(value: Any) -> object:
-    """Convert pandas/numpy scalars into JSON-friendly values."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (str, int)):
-        return value
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    if isinstance(value, np.bool_):
-        return bool(value)
-    if isinstance(value, np.integer):
-        return int(value)
-    if isinstance(value, np.floating):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    if isinstance(value, np.datetime64):
-        return None if pd.isna(value) else pd.Timestamp(value).isoformat()
-    if isinstance(value, np.ndarray):
-        return [_json_safe(item) for item in value.tolist()]
-    if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    if isinstance(value, pd.Timedelta):
-        return str(value)
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    return str(value)
 
 
 def _records(frame: pd.DataFrame) -> list[dict[str, object]]:

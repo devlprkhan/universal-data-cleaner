@@ -259,13 +259,18 @@ published from `main` at `392b1f8`):
 
 Exit criteria:
 
-- [ ] A custom validation protocol supports cross-column, conditional, and
+- [x] A custom validation protocol supports cross-column, conditional, and
       grouped rules.
-- [ ] Reference-versus-current distribution comparison ships with PSI,
+- [x] Reference-versus-current distribution comparison ships with PSI,
       Wasserstein distance, missingness deltas, and category deltas.
-- [ ] Drift policies and thresholds are documented and reproducible.
-- [ ] Failing-row diagnostics are bounded and privacy-safe.
-- [ ] Historical batch comparison is available through a report sink.
+- [x] Drift policies and thresholds are documented and reproducible.
+- [x] Failing-row diagnostics are bounded and privacy-safe.
+- [x] Historical batch comparison is available through a report sink.
+
+Release gate: the full local gate (ruff, formatting, mypy, pytest, `uv build`, and
+strict MkDocs) passes. CI on the release PR must cover lint, typecheck, tests on
+3.10–3.13, compatibility, build, installed wheel, docs, and `ci-success` before
+tagging. Post-publication provenance verification is recorded after the release.
 
 ### `2.13.0` — Reproducibility and operations
 
@@ -405,14 +410,14 @@ quantiles require a statistically correct global algorithm.
 
 ### Phase 3 — Validation and quality engineering (P2)
 
-- [ ] Custom validation protocol.
-- [ ] Cross-column expectations.
-- [ ] Conditional rules.
-- [ ] Grouped validations.
-- [ ] Statistical distribution drift (PSI, Wasserstein, missingness, categories).
-- [ ] Reference-data comparisons.
-- [ ] Row-level diagnostics with bounded, privacy-safe sampling.
-- [ ] Historical batch comparison.
+- [x] Custom validation protocol.
+- [x] Cross-column expectations.
+- [x] Conditional rules.
+- [x] Grouped validations.
+- [x] Statistical distribution drift (PSI, Wasserstein, missingness, categories).
+- [x] Reference-data comparisons.
+- [x] Row-level diagnostics with bounded, privacy-safe sampling.
+- [x] Historical batch comparison.
 - [ ] Optional integration with Pandera and Evidently.
 
 This remains an extensible validation layer, not a Pandera replacement.

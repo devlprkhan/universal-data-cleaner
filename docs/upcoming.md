@@ -12,10 +12,11 @@ The decision to prioritise hardening over new features is recorded in
 
 ## Current focus
 
-**`2.12.0` — validation and statistical drift.** The next release extends the
-validation layer with cross-column and conditional rules, adds PSI and
-Wasserstein drift against a reference distribution, and keeps failing-row
-diagnostics bounded and privacy-safe.
+**`2.12.0` — validation and statistical drift.** This release extends the
+validation layer with cross-column, conditional, and grouped rules, adds PSI and
+Wasserstein drift against a reusable reference profile, keeps failing-row
+diagnostics bounded and privacy-safe, and adds a JSON Lines report sink for
+historical batch comparison.
 
 `2.11.0` shipped on 2026-11-13 with provenance for both the wheel and the sdist;
 `gh attestation verify` passes against `publish.yml@refs/tags/v2.11.0`, and a
@@ -33,6 +34,26 @@ workflow, so it correctly has no provenance.
 | `2.13.0` | Reproducibility and operations | Planned |
 | `2.14.0` | Testing and security | Planned |
 | `3.0.0` | Ecosystem readiness | Conditional |
+
+## `2.12.0` — Validation and statistical drift
+
+The `2.12.0` release closes the validation and quality-engineering phase:
+
+- `col()` conditions, `row_rule()`, `conditional()`, `grouped()`,
+  `unique_combination()`, and `sum_equals()` for cross-column, scoped, grouped,
+  and arithmetic rules;
+- the public `Validatable` protocol, so custom rules mix with built-in
+  expectations in one `validate()` call;
+- `DriftProfile`, `DriftPolicy`, and `compare_distributions()` with PSI,
+  Wasserstein distance, missingness deltas, category deltas, and an `other`
+  bucket for levels outside the retained reference categories;
+- `ValidationReport.diagnose()` and `RowDiagnostics` for bounded failing-row
+  samples that omit cell values by default;
+- `JsonlReportSink` for append-only batch history and reproducible drift
+  comparisons against a stored reference.
+
+The guide is [Statistical drift](drift.md); rule and diagnostic examples are in
+[Validation, joins & dedup](validation-joins.md).
 
 ## `2.11.0` — Large data and performance
 
@@ -68,12 +89,10 @@ No new cleaning primitive was added in this phase.
 
 ## Later phases
 
-- **Validation and drift:** custom and cross-column validation, conditional and
-  grouped rules, PSI and Wasserstein drift, reference comparisons, privacy-safe
-  row diagnostics.
+- **Validation integrations:** optional Pandera and Evidently adapters. The core
+  validation protocol, rules, and drift metrics ship in `2.12.0`.
 - **Reproducibility and operations:** contract versions and migrations, exact
-  content fingerprints, artifact integrity, report sinks, structured logging,
-  serving guidance.
+  content fingerprints, artifact integrity, structured logging, serving guidance.
 - **Testing and security:** property-based and fuzz testing, dtype and timezone
   edge cases, estimator checks, cross-platform CI, dependency auditing,
   supply-chain review.
@@ -84,6 +103,7 @@ No new cleaning primitive was added in this phase.
 
 | Version | Theme | Status |
 | --- | --- | --- |
+| `2.11.0` | Large data and performance: chunked transforms, Parquet, benchmark suite | Shipped |
 | `2.10.0` | Production correctness: concurrency-safe reports, precision policies, atomic artifacts, chunked uniqueness | Shipped |
 | `2.9.1` | Ship merged hardening; prove PyPI and GitHub provenance | Shipped |
 | `2.9.0` | Reliability hardening across contracts, joins, artifacts, clipping, ingestion, and API docs | Shipped |
