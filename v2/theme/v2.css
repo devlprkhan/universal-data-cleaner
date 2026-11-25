@@ -1412,7 +1412,7 @@ input {
   --wm-line: var(--border);
   --wm-node: var(--bg);
   --wm-node-line: var(--border);
-  --wm-accent: var(--brand-accent);
+  --wm-accent: var(--border);
 }
 
 [data-component="wordmark"] .wm-plate {
