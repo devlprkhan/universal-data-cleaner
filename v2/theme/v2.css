@@ -1404,15 +1404,16 @@ input {
   width: 100%;
   height: auto;
   /* The blueprint follows the page: the plate is the page's own surface, the hatch is
-     a muted rule, the outline its faint ink, and the anchor nodes are hollow with a
-     muted border. Only the 'i' dot and the hyphen carry the brand accent, so the
-     wordmark stays a quiet sign-off. */
+     its strong rule, the hairline its weak ink, and the anchor nodes are hollow with a
+     cyan-tinted border. The mark's accent lands on the 'i' dot and the hyphen. The
+     whole drawing is faded so the footer wordmark stays a quiet sign-off. */
   --wm-bg: var(--bg);
-  --wm-hatch: var(--border);
-  --wm-line: var(--border);
+  --wm-hatch: var(--border-strong);
+  --wm-line: var(--text-weak);
   --wm-node: var(--bg);
-  --wm-node-line: var(--border);
-  --wm-accent: var(--border);
+  --wm-node-line: color-mix(in srgb, var(--brand-accent) 55%, var(--border-strong));
+  --wm-accent: var(--brand-accent);
+  opacity: 0.55;
 }
 
 [data-component="wordmark"] .wm-plate {
