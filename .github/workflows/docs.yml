@@ -9,6 +9,16 @@ on:
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
+      - "v2/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "v2/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -38,6 +48,19 @@ jobs:
 
       - name: Build documentation
         run: uv run --group docs mkdocs build --strict
+
+      - name: Build documentation v2
+        run: |
+          python3 v2/build.py
+          mkdir -p site/v2
+          cp -R v2/site/. site/v2/
+
+      - name: Check the version switches
+        run: |
+          test -f site/v2/index.html
+          test -f site/v2/quickstart/index.html
+          grep -q 'href="../../"' site/v2/quickstart/index.html
+          grep -q 'udc-version' site/assets/extra.js
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

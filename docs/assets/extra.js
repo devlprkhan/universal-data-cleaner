@@ -30,6 +30,33 @@
     });
   };
 
+  const enableVersionSwitch = () => {
+    const header = document.querySelector(".md-header__inner");
+    if (!header || header.querySelector(".udc-version")) return;
+
+    // The logo's href is the site root relative to this page ("." at the root, ".."
+    // one level down), so the switch keeps working under any base path.
+    const root = header
+      .querySelector(".md-header__button.md-logo")
+      ?.getAttribute("href");
+    if (!root) return;
+
+    const link = document.createElement("a");
+    link.className = "udc-version";
+    link.href = `${root.replace(/\/+$/, "")}/v2/`;
+    link.title = "Read the new documentation site (v2)";
+    link.setAttribute("aria-label", "Switch to documentation version 2");
+    link.innerHTML =
+      '<span class="udc-version__tag">v2</span>' +
+      '<span class="udc-version__label">New docs</span>';
+
+    const anchor =
+      header.querySelector('[data-md-component="palette"]') ??
+      header.querySelector('[data-md-component="search"]');
+    if (anchor) header.insertBefore(link, anchor);
+    else header.append(link);
+  };
+
   const enableExternalLinks = () => {
     document.querySelectorAll("a[href]").forEach((link) => {
       let url;
@@ -49,6 +76,7 @@
     labelCopyButtons();
     labelIconLinks();
     enableScrollableTables();
+    enableVersionSwitch();
     enableExternalLinks();
 
     const liveRegion = document.createElement("div");

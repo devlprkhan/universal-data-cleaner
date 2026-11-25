@@ -2007,3 +2007,59 @@ body.udc-inline-copy .md-dialog {
     max-width: none;
   }
 }
+
+/* ── Version switch: V1 (this site) ↔ V2 (/v2/) ─────────────────────────── */
+
+.udc-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.85rem;
+  margin-inline-end: 0.5rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--udc-line-strong);
+  border-radius: var(--udc-radius);
+  color: var(--udc-header-fg);
+  font-family: var(--udc-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 150ms var(--udc-ease),
+    border-color 150ms var(--udc-ease),
+    color 150ms var(--udc-ease);
+}
+
+.udc-version:hover,
+.udc-version:focus-visible {
+  border-color: var(--udc-pine);
+  background: var(--udc-pine-soft);
+  color: var(--udc-pine);
+}
+
+.udc-version__tag {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35rem;
+  height: 1.15rem;
+  padding: 0 0.2rem;
+  border-radius: 0.25rem;
+  background: var(--udc-pine);
+  color: var(--udc-paper);
+  font-size: 0.55rem;
+  letter-spacing: 0.02em;
+}
+
+@media screen and (max-width: 44.984375em) {
+  .udc-version {
+    margin-inline-end: 0.25rem;
+    padding: 0 0.35rem;
+  }
+
+  .udc-version__label {
+    display: none;
+  }
+}
