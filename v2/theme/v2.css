@@ -1103,12 +1103,12 @@ input {
   width: 100%;
   margin: 0 0 1.5rem;
   border-collapse: collapse;
-  font-size: var(--fs-micro);
   line-height: 1.5;
   text-align: start;
 }
 
-/* Tables 5: a full 1px grid, 12px cells, the head on the code surface. */
+/* Tables 5: a full 1px grid; the head is 12px mono on the code surface, body cells
+   inherit the article's reading size. */
 [data-component="docs-article"] th,
 [data-component="docs-article"] td {
   padding: 0.75rem;
