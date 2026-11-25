@@ -130,7 +130,7 @@ topbar, the section row and the Contents row take over and the rails are hidden.
 | Code frame header | 2.5rem | measured 40px |
 | Table | 12px cells, 1px full grid, `--code-head` head | the head is a band, the cells a grid |
 | Footer links | foot of the sidebar; the footer carries them on phones | aligns with the nav above |
-| Footer mark | a pixel-block SVG in the page's inks: hatch `--border-strong`, outline `--text-weak`, hollow nodes on `--bg` with an accent-tinted border; the 'i' dot and hyphen carry `--brand-accent`. The whole drawing is faded to `opacity: 0.55` so it stays a quiet sign-off | generated from `pipeline/wordmark.py`; no font file |
+| Footer mark | a pixel-block SVG drawn in the page's muted inks: hatch and outline `--border`, hollow nodes on `--bg` with a `--border` stroke; everything — including the 'i' dot and hyphen — uses `--border`, so the wordmark is a quiet sign-off like upstream's | generated from `pipeline/wordmark.py`; no font file |
 
 ## 3. The nav's bracket list
 
