@@ -180,9 +180,19 @@ class Renderer:
         style = (
             f' style="--card-columns: {html.escape(cols, quote=True)}"' if cols else ""
         )
+        rendered: list[str] = []
+        for match in re.finditer(r"<Card\b([^>]*)>(.*?)</Card>", body, re.S):
+            attrs = self._attributes(match.group(1))
+            rendered.append(
+                self.card(
+                    attrs.get("title", ""),
+                    attrs.get("href", "#"),
+                    match.group(2).strip(),
+                )
+            )
         return (
             f'<div data-component="card-group"{style}>'
-            f"{self.scan_components(body)}"
+            f"{''.join(rendered)}"
             "</div>"
         )
 

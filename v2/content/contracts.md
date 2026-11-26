@@ -181,7 +181,7 @@ YAML support is optional and requires `pyyaml`:
 
 ```bash
 $ pip install pyyaml
-
+```
 
 ```python
 contract.to_yaml()

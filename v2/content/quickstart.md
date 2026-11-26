@@ -201,7 +201,7 @@ The same report is available from the terminal:
 
 ```bash
 $ python -m data_cleaner audit incoming.csv --contract artifacts/contract.json
-
+```
 
 Set `--fail-on-warning` to fail the command on warnings and use the exit code in
 CI. See [Batch reporting](/reporting/) for every option.

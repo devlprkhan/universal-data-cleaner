@@ -184,7 +184,7 @@ Parquet ingestion is optional and requires PyArrow:
 
 ```bash
 $ pip install "universal-data-cleaner[parquet]"
-
+```
 
 ```python
 from data_cleaner import iter_parquet_safe, read_parquet_safe

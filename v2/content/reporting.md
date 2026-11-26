@@ -84,7 +84,7 @@ Excel support requires the optional `excel` extra:
 
 ```bash
 $ pip install "universal-data-cleaner[excel]"
-
+```
 
 ## Audit against a fitted cleaner
 
@@ -127,13 +127,13 @@ The same report is available from the terminal:
 ```bash
 $ python -m data_cleaner audit incoming.csv
 $ python -m data_cleaner audit incoming.xlsx --sheet Orders
-
+```
 
 The installed console script is equivalent:
 
 ```bash
 $ data-cleaner audit incoming.xlsx --sheet Orders
-
+```
 
 The command detects CSV and Excel input from the file extension. Common options:
 
@@ -169,7 +169,7 @@ $   --contract artifacts/contract.json \
 $   --format json \
 $   --output artifacts/audit.json \
 $   --fail-on-warning
-
+```
 
 ## What the report does not do
 

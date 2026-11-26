@@ -190,7 +190,7 @@ $   --cleaner artifacts/data_cleaner.joblib \
 $   --format json \
 $   --output artifacts/audit.json \
 $   --fail-on-warning
-
+```
 
 `0` means the batch passed, `1` means error findings (or warnings with
 `--fail-on-warning`), and `2` means the input or artifact could not be read. See
@@ -284,7 +284,7 @@ the source repository:
 $ uvx "pypi-attestations==0.0.31" verify pypi \
 $   --repository https://github.com/devlprkhan/universal-data-cleaner \
 $   pypi:universal_data_cleaner-<version>-py3-none-any.whl
-
+```
 
 GitHub also stores a build-provenance attestation for the same artifacts under
 the repository's **Attestations** tab. Check it with the GitHub CLI:
@@ -292,7 +292,7 @@ the repository's **Attestations** tab. Check it with the GitHub CLI:
 ```bash
 $ gh attestation verify universal_data_cleaner-<version>-py3-none-any.whl \
 $   --repo devlprkhan/universal-data-cleaner
-
+```
 
 Repeat both commands for the `.tar.gz` source distribution. Then confirm a clean
 install from PyPI works:
@@ -301,9 +301,7 @@ install from PyPI works:
 $ uv venv /tmp/udc-check
 $ uv pip install --python /tmp/udc-check/bin/python universal-data-cleaner==<version>
 $ /tmp/udc-check/bin/data-cleaner --version
-
-
-Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored in
+```Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored in
 the repository. The workflow refuses to publish if the `.publish.attestation`
 files are missing.
 
