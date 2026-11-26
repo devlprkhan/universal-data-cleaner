@@ -1,6 +1,6 @@
 """Live preview: rebuild the site when a source file changes, and reload the page.
 
-    uv run python v2/dev.py      # http://localhost:8000/
+    uv run python docs/dev.py      # http://localhost:8000/
 
 The server serves the built site (``site/``) at the root, exactly as GitHub Pages
 does. The alignment checker is served from ``/tools/audit.html``. Every HTML

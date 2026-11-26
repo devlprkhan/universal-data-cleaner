@@ -8,8 +8,8 @@ see `reference/PIPELINE.md`) or measured in a browser against the built pages wi
 Run it:
 
 ```bash
-uv run python v2/dev.py             # rebuild on change and serve (recommended)
-uv run python v2/build.py           # build site/ once
+uv run python docs/dev.py             # rebuild on change and serve (recommended)
+uv run python docs/build.py           # build site/ once
 uv run python -m http.server 8000 --directory site   # serve the build yourself
 ```
 
@@ -199,7 +199,7 @@ and what makes a fence a session rather than a screenful of muted output.
 
 ## 7. What the build checks
 
-`uv run python v2/build.py` fails on:
+`uv run python docs/build.py` fails on:
 
 * **broken links** — every `href` must resolve to a built file;
 * **missing anchors** — every `#fragment` must exist as an `id` in the target;

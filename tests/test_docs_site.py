@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "v2"))
+sys.path.insert(0, str(ROOT / "docs"))
 
 import build  # noqa: E402  (after sys.path)
 
@@ -20,7 +20,7 @@ def test_site_builds_at_the_root(tmp_path: Path) -> None:
     assert (out / "quickstart" / "index.html").is_file()
     assert (out / "api" / "index.html").is_file()
     assert (out / "adr" / "index.html").is_file()
-    assert not (out / "v2").exists()
+    assert not (out / "docs").exists()
 
 
 def test_pages_and_assets_use_root_paths(tmp_path: Path) -> None:
@@ -30,7 +30,7 @@ def test_pages_and_assets_use_root_paths(tmp_path: Path) -> None:
     home = (out / "index.html").read_text(encoding="utf-8")
     assert 'data-base=""' in home
     assert "Docs v1" not in home
-    assert 'href="v2/' not in home
+    assert 'href="docs/' not in home
     assert (
         '<link rel="canonical" '
         'href="https://devlprkhan.github.io/universal-data-cleaner/"'
@@ -39,13 +39,13 @@ def test_pages_and_assets_use_root_paths(tmp_path: Path) -> None:
     search = (out / "assets" / "search-index.js").read_text(encoding="utf-8")
     assert '"href": "./"' in search
     assert '"href": "quickstart/"' in search
-    assert '"href": "v2/' not in search
+    assert '"href": "docs/' not in search
 
     sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
     assert (
         "<loc>https://devlprkhan.github.io/universal-data-cleaner/</loc>"
     ) in sitemap
-    assert "/v2/" not in sitemap
+    assert "/docs/" not in sitemap
 
 
 def test_api_page_is_generated_from_the_package(tmp_path: Path) -> None:
@@ -62,5 +62,5 @@ def test_api_page_is_generated_from_the_package(tmp_path: Path) -> None:
 
 
 def test_v1_docs_are_retired() -> None:
-    assert not (ROOT / "docs").exists()
     assert not (ROOT / "mkdocs.yml").exists()
+    assert not (ROOT / "v2").exists()

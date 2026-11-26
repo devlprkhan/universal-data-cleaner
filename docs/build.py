@@ -1,7 +1,7 @@
 """Build the documentation website into ``site/`` at the repository root.
 
-Run:   uv run python v2/build.py
-Serve: uv run python v2/dev.py           (live rebuild + reload)
+Run:   uv run python docs/build.py
+Serve: uv run python docs/dev.py           (live rebuild + reload)
 
 The pipeline mirrors ``services/site`` in ``anomalyco/opencode`` — the same
 split of responsibilities, in Python (see ``reference/PIPELINE.md``):
@@ -111,7 +111,7 @@ def render_page(
         noindex=meta.noindex,
         table_of_contents=meta.table_of_contents,
         section=DOCS,
-        source=f"v2/content/{item.slug}.md",
+        source=f"docs/content/{item.slug}.md",
         markdown=markdown,
     )
     record = search.record(

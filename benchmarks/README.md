@@ -1,7 +1,7 @@
 # Benchmarks
 
 Reproducible measurements for Universal Data Cleaner. Results feed
-[v2/content/performance.md](../v2/content/performance.md); no performance claim is published
+[docs/content/performance.md](../docs/content/performance.md); no performance claim is published
 without a committed run.
 
 ## Run

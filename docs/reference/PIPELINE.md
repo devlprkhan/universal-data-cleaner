@@ -1,12 +1,12 @@
 # How the OpenCode docs site authors and builds its pages
 
 Evidence base: every file referenced below was downloaded from
-`anomalyco/opencode@dev` and saved under `v2/reference/src/` (flattened names, original path
+`anomalyco/opencode@dev` and saved under `docs/reference/src/` (flattened names, original path
 recoverable from the name). URLs came from
 `https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/<path>` and directory
 listings from `https://api.github.com/repos/anomalyco/opencode/contents/<dir>?ref=dev`.
 
-Saved evidence (46 files) — `v2/reference/src/`:
+Saved evidence (46 files) — `docs/reference/src/`:
 
 | Saved file | Original path |
 | --- | --- |
