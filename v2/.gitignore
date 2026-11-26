@@ -5,6 +5,9 @@ site/
 .shots/
 _probe.py
 _probe2.py
+_tools_scratch/
+v2/tools/_*.py
+v2/tools/check_*.py
 
 # Raw sources pulled from the reference repository (third-party; not ours to publish).
 # PIPELINE.md stays tracked: it is our own write-up.
