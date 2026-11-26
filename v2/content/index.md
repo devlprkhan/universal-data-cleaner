@@ -66,13 +66,13 @@ schema. `transform()` applies them without learning from the frame you pass in.
 === "pip"
 
     ```bash
-    $ pip install universal-data-cleaner
+    pip install universal-data-cleaner
     ```
 
 === "uv"
 
     ```bash
-    $ uv add universal-data-cleaner
+    uv add universal-data-cleaner
     ```
 
 The distribution is `universal-data-cleaner`; the import is `data_cleaner`.
