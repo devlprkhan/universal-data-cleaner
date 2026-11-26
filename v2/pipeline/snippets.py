@@ -33,9 +33,22 @@ def resolve(
         if not target.is_file():
             out.append(f"<!-- missing snippet: {match.group(1)} -->")
             continue
+        content = target.read_text(encoding="utf-8")
+        # The including page already renders its own h1 from frontmatter, so drop a
+        # leading h1 (and its trailing blank line) from the inlined file to avoid
+        # a duplicated heading.
+        lines = content.splitlines()
+        i = 0
+        while i < len(lines) and lines[i].strip() == "":
+            i += 1
+        if i < len(lines) and lines[i].startswith("# "):
+            i += 1
+            while i < len(lines) and lines[i].strip() == "":
+                i += 1
+            content = "\n".join(lines[i:])
         out.append(
             resolve(
-                target.read_text(encoding="utf-8"),
+                content,
                 root=root,
                 relative_to=target.parent,
                 depth=depth + 1,
