@@ -29,6 +29,7 @@ from pipeline.render import Heading
 from pipeline.wordmark import wordmark
 
 SITE_NAME = "Universal Data Cleaner"
+BASE_URL = "https://devlprkhan.github.io/universal-data-cleaner/"
 REPO = "https://github.com/devlprkhan/universal-data-cleaner"
 COPY_LABELS = (
     ("idle", "Copy as Markdown"),
@@ -219,13 +220,9 @@ def asset(name: str, depth: int, build_id: str) -> str:
 
 def _lockup(page: Page, host: str) -> str:
     home = page_href("index", page.depth)
-    # V2 is published under `/v2/`, V1 stays at the site root: one level above a page's
-    # own directory is the root, whichever page is open.
-    v1 = "../" * (page.depth + 1) or "./"
     section_title = page.section.title if page.section else "Docs"
     rows = [
-        (home, "Docs v2", CURRENT, ""),
-        (v1, "Docs v1", "", ""),
+        (home, "Docs", CURRENT, ""),
         (REPO, "Source", "", ' target="_blank" rel="noopener"'),
     ]
     menu = "".join(
@@ -241,7 +238,7 @@ def _lockup(page: Page, host: str) -> str:
     )
 
 
-def _logo(page: Page, v1_available: bool) -> str:
+def _logo(page: Page) -> str:
     return (
         f'<a href="{page_href("index", page.depth)}" data-slot="logo" data-variant="icon" '
         f'aria-label="Universal Data Cleaner home">{ICONS["logo"]}</a>'
@@ -462,11 +459,15 @@ SPECULATION = (
 )
 
 
-def document(page: Page, *, build_id: str, v1_available: bool) -> str:
+def document(page: Page, *, build_id: str) -> str:
     """The whole page, as upstream's ``DocsLayout`` renders it."""
     stylesheet = asset("v2.css", page.depth, build_id)
     script = asset("v2.js", page.depth, build_id)
-    canonical = f"https://devlprkhan.github.io/universal-data-cleaner/{page.slug}/"
+    canonical = (
+        BASE_URL
+        if page.slug in ("", "index")
+        else f"{BASE_URL}{page.slug.removesuffix('/index')}/"
+    )
     alternate = (
         '<link rel="alternate" type="text/markdown" href="index.md">'
         if page.markdown
@@ -494,12 +495,12 @@ def document(page: Page, *, build_id: str, v1_available: bool) -> str:
 <link rel="stylesheet" href="{stylesheet}">
 </head>
 <body>
-<div data-site data-page="docs" data-layout="docs" data-theme="system" data-strings='{strings}'>
+<div data-site data-page="docs" data-layout="docs" data-theme="system" data-base="{page.up}" data-strings='{strings}'>
 <script>try{{var t=localStorage.getItem("udc-theme");if(t==="light"||t==="dark"){{document.documentElement.dataset.theme=t}}}}catch(e){{}}</script>
 <a href="#content" data-component="skip-link">Skip to content</a>
 
 <header data-component="topbar">
-  {_logo(page, v1_available)}
+  {_logo(page)}
   {_lockup(page, "topbar")}
   <button type="button" data-slot="search-button" data-search-open aria-label="Search the docs" aria-haspopup="dialog">{ICONS["search"]}</button>
   {_github("topbar")}
@@ -508,7 +509,7 @@ def document(page: Page, *, build_id: str, v1_available: bool) -> str:
 <div data-slot="frame">
   <aside data-component="sidebar" data-section-nav data-section="nav" aria-label="Documentation">
     {lockup}
-    {_logo(page, v1_available)}
+    {_logo(page)}
     <div data-component="section-nav">
       <button type="button" data-slot="section-toggle" aria-expanded="false" aria-controls="section-nav">
         <span data-slot="current">{BRACKET_CURRENT}<span data-slot="label">{esc(page.title)}</span></span>

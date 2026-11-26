@@ -395,16 +395,19 @@
         .sort((a, b) => b.score - a.score)
         .slice(0, 9);
 
+      const site = document.querySelector("[data-site]");
+      const base = site?.dataset.base || "";
+
       if (!scored.length) {
         results.innerHTML =
           `<p data-slot="empty">${escapeHTML(strings.noResults || "No results for")} ` +
-          `“${escapeHTML(query)}”. <a href="../">${escapeHTML(strings.browse || "Browse the docs")}</a></p>`;
+          `“${escapeHTML(query)}”. <a href="${escapeHTML(base || "./")}">${escapeHTML(strings.browse || "Browse the docs")}</a></p>`;
         return;
       }
 
       scored.forEach(({ page }, index_) => {
         const row = document.createElement("a");
-        row.href = page.href;
+        row.href = base + (page.href || "./");
         row.dataset.slot = "option";
         row.setAttribute("role", "option");
         row.innerHTML =

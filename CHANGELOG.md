@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation site is now the `v2/` generator, published at the repository
+  root. The MkDocs site under `docs/` and `mkdocs.yml` are retired. The API
+  reference is generated from the package docstrings at build time.
+
 ## [2.12.0] - 2026-11-23
 
 ### Added
@@ -97,7 +103,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   100K, 1M, and 2M rows across narrow, wide, and high-cardinality frames. Runtime
   and peak memory are measured separately, and each case runs in a fresh
   subprocess.
-- `docs/performance.md` documents the methodology, measured results, supported
+- `v2/content/performance.md` documents the methodology, measured results, supported
   workload, and chunked workflow.
 
 ### Changed

@@ -1,26 +1,26 @@
-# v2 style guide
+# Documentation style guide
 
-The rules this preview is built to, and the numbers behind them. Every value below was
-either read from the reference stylesheets (`anomalyco/opencode`, `services/site`, branch
-`dev` — see `reference/PIPELINE.md`) or measured in a browser against the built pages with
+The rules this site is built to, and the numbers behind them. Every value below was either
+read from the reference stylesheets (`anomalyco/opencode`, `services/site`, branch `dev` —
+see `reference/PIPELINE.md`) or measured in a browser against the built pages with
 `tools/audit.html`. Where we deviate, the deviation is written down and justified.
 
 Run it:
 
 ```bash
-python3 v2/dev.py                   # rebuild on change and serve (recommended)
-python3 v2/build.py                 # rebuild v2/site once
-python3 -m http.server 8000         # serve the repository root yourself
+uv run python v2/dev.py             # rebuild on change and serve (recommended)
+uv run python v2/build.py           # build site/ once
+uv run python -m http.server 8000 --directory site   # serve the build yourself
 ```
 
 `dev.py` watches `content/`, `theme/`, `pipeline/`, `nav.py` and `build.py`, rebuilds on
-every save, serves the repository root at http://localhost:8000/v2/, and reloads the
-page after a rebuild. Pass `--port 8080` for another port.
+every save, serves the built site at http://localhost:8000/, and reloads the page after a
+rebuild. Pass `--port 8080` for another port.
 
 Then measure it rather than eyeball it:
 
 ```bash
-# http://localhost:8000/v2/tools/audit.html?page=/v2/quickstart/
+# http://localhost:8000/tools/audit.html?page=/quickstart/
 ```
 
 ## 1. Tokens
@@ -199,15 +199,14 @@ and what makes a fence a session rather than a screenful of muted output.
 
 ## 7. What the build checks
 
-`python3 v2/build.py` fails on:
+`uv run python v2/build.py` fails on:
 
 * **broken links** — every `href` must resolve to a built file;
 * **missing anchors** — every `#fragment` must exist as an `id` in the target;
-* **asset prefix** — nothing may load from outside the built site (the V1 link is exempt,
-  as upstream exempts `/v1/docs`);
+* **asset prefix** — nothing may load from outside the built site;
 * **reserved names** — no page may take `assets`, `llms.txt`, `sitemap.xml`, `favicon.svg`;
-* **budgets** — the script ≤ 8 KiB gzipped, the stylesheet ≤ 30 KiB gzipped (currently 5.0
-  and 12.0).
+* **budgets** — the script ≤ 8 KiB gzipped, the stylesheet ≤ 30 KiB gzipped (currently 5.2
+  and 12.2).
 
 It also writes each page's Markdown twin (`index.md` beside `index.html`) for *Copy as
 Markdown*, `llms.txt`, and `sitemap.xml`.
@@ -218,9 +217,9 @@ Markdown*, `llms.txt`, and `sitemap.xml`.
 | --- | --- | --- |
 | MDX components compiled by Vite | a Python scanner over the same component syntax | no JS toolchain in this repository |
 | `CodeTabs tabs={[…]}` with the code as props | `=== "label"` fences rendering the same markup | keeps code in fences, where editors can read it |
-| `.mdx` sources, `docs/` published set | `.md` under `content/`, migrated from `docs/` by `tools/migrate_content.py` | V1 keeps its own sources until v2 goes live |
-| Pagefind index | a build-time JSON index (`assets/search-index.js`) | no binary dependency; swap in Pagefind before shipping |
-| API page rendered from `openapi.json` | lifted from the mkdocstrings HTML the V1 build already produced | keeps real signatures without re-generating them |
+| `.mdx` sources | `.md` under `content/` | no JSX toolchain in this repository |
+| Pagefind index | a build-time JSON index (`assets/search-index.js`) | no binary dependency |
+| API page rendered from `openapi.json` | generated from the package docstrings by `pipeline/api.py` | keeps real signatures without a separate docs build |
 | `Footer wordmark is a 234×42 SVG` | a generated pixel-block blueprint: `universal / data-cleaner`, hatch fill, 1px outline, anchor nodes (`pipeline/wordmark.py`) | same technique as upstream's wordmark, in this project's letters |
 | Wordmark stays a dark hatch in dark mode | it draws itself from the page's tokens (`--bg`, `--border-strong`, `--text-weak`), so both themes get their own drawing; the cyan dot and hyphen are the accent | an exact `#0a0a0a` fill disappears against a `#0c0c0c` page |
 | `--link` is a blue | the brand's cyan/teal | the mark's palette (see §1) |

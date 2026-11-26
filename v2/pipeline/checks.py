@@ -19,9 +19,6 @@ import re
 from pathlib import Path
 
 RESERVED = {"assets", "llms.txt", "sitemap.xml", "favicon.svg", "pagefind", "_build"}
-# Links into another docs set (the V1 site beside this one) leave this build by
-# design, as upstream exempts /v1/docs from its link check.
-EXEMPT = ("site/",)
 LINK = re.compile(r'(?:href|src)="([^"]+)"')
 ID = re.compile(r'\bid="([^"]+)"')
 SKIP = ("http://", "https://", "mailto:", "tel:", "//", "data:")
@@ -31,12 +28,8 @@ def _pages(out: Path) -> list[Path]:
     return sorted(path for path in out.rglob("*.html") if path.is_file())
 
 
-def _is_exempt(href: str) -> bool:
-    return any(href.endswith(suffix) for suffix in EXEMPT)
-
-
 def _target(page: Path, out: Path, href: str) -> str | None:
-    if not href or href.startswith(SKIP) or _is_exempt(href):
+    if not href or href.startswith(SKIP):
         return None
     path = href.partition("#")[0].partition("?")[0]
     base = "/" + posixpath.relpath(page, out).replace("\\", "/")

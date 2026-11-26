@@ -4,21 +4,17 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/**"
-      - "mkdocs.yml"
+      - "v2/**"
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
-      - "v2/**"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
-      - "docs/**"
-      - "mkdocs.yml"
+      - "v2/**"
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
-      - "v2/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -46,21 +42,15 @@ jobs:
       - name: Install documentation dependencies
         run: uv sync --group docs
 
-      - name: Build documentation
-        run: uv run --group docs mkdocs build --strict
+      - name: Build the documentation website
+        run: uv run python v2/build.py
 
-      - name: Build documentation v2
+      - name: Check the built site
         run: |
-          python3 v2/build.py
-          mkdir -p site/v2
-          cp -R v2/site/. site/v2/
-
-      - name: Check the version switches
-        run: |
-          test -f site/v2/index.html
-          test -f site/v2/quickstart/index.html
-          grep -q 'href="../../"' site/v2/quickstart/index.html
-          grep -q 'udc-version' site/assets/extra.js
+          test -f site/index.html
+          test -f site/quickstart/index.html
+          test -f site/api/index.html
+          test -f site/assets/search-index.js
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

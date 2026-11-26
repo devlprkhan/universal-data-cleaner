@@ -1,18 +1,15 @@
 """Live preview: rebuild the site when a source file changes, and reload the page.
 
-    python3 v2/dev.py            # http://localhost:8000/v2/
+    uv run python v2/dev.py      # http://localhost:8000/
 
-The server mirrors the deployed tree: the V1 MkDocs build (``site/``) at the root and the
-V2 build at ``/v2/``, so the version switches resolve the same way here and in production.
-The alignment checker is served from ``/v2/tools/audit.html``. Every HTML response gets a
-small reload client, which polls ``/__build``; when a rebuild bumps the stamp the page
-reloads itself. Assets are served with ``no-store`` so a reload always shows the current
-CSS.
+The server serves the built site (``site/``) at the root, exactly as GitHub Pages
+does. The alignment checker is served from ``/tools/audit.html``. Every HTML
+response gets a small reload client, which polls ``/__build``; when a rebuild
+bumps the stamp the page reloads itself. Assets are served with ``no-store`` so a
+reload always shows the current CSS.
 
 Only the build's sources are watched — ``content/``, ``theme/``, ``pipeline/``,
-``nav.py`` and ``build.py``. A rebuild takes well under a second. V1 is built separately:
-
-    uv run --group docs mkdocs build
+``nav.py`` and ``build.py``. A rebuild takes well under a second.
 """
 
 from __future__ import annotations
@@ -44,9 +41,7 @@ WATCH = (
     HERE / "build.py",
 )
 
-# The deployed tree: the MkDocs build at the site root, the V2 build under `/v2/`.
-V1_SITE = ROOT / "site"
-V2_SITE = HERE / "site"
+SITE = ROOT / "site"
 
 RELOAD = """<script>
 (() => {
@@ -125,19 +120,11 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def translate_path(self, path: str) -> str:
-        """Mirror the deployed tree: V1 at the root, V2 under ``/v2/``.
-
-        The live site publishes the MkDocs build at the site root and the V2 build at
-        ``/v2/``, so the version switches are relative links that work here too. The
-        checker stays at ``/v2/tools/`` (repository sources, not part of the build).
-        """
+        """Serve the built site at the root; the checker comes from the sources."""
         clean = unquote(path.split("?", 1)[0].split("#", 1)[0], errors="surrogatepass")
-        if clean == "/v2" or clean.startswith("/v2/"):
-            rest = posixpath.normpath(clean[3:]).lstrip("/")
-            if rest == "tools" or rest.startswith("tools/"):
-                return str(HERE / rest)
-            return str(V2_SITE / rest)
-        return str(V1_SITE / posixpath.normpath(clean).lstrip("/"))
+        if clean == "/tools" or clean.startswith("/tools/"):
+            return str(HERE / posixpath.normpath(clean).lstrip("/"))
+        return str(SITE / posixpath.normpath(clean).lstrip("/"))
 
     def send_head(self):  # type: ignore[no-untyped-def]
         file = Path(self.translate_path(self.path))
@@ -160,14 +147,14 @@ class Handler(SimpleHTTPRequestHandler):
         return super().send_head()
 
     def log_message(self, fmt: str, *args: object) -> None:
-        if args and str(args[0]).startswith(("GET /__build", "GET /v2/assets")):
+        if args and str(args[0]).startswith(("GET /__build", "GET /assets")):
             return
         super().log_message(fmt, *args)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Rebuild the v2 docs on change and serve them."
+        description="Rebuild the documentation website on change and serve it."
     )
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument(
@@ -183,12 +170,10 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "v1": f"http://localhost:{args.port}/",
-                "v2": f"http://localhost:{args.port}/v2/",
-                "audit": f"http://localhost:{args.port}/v2/tools/audit.html?page=/v2/quickstart/",
-                "v1 built": "yes"
-                if V1_SITE.is_dir()
-                else "no — run: uv run --group docs mkdocs build",
+                "site": f"http://localhost:{args.port}/",
+                "audit": (
+                    f"http://localhost:{args.port}/tools/audit.html?page=/quickstart/"
+                ),
             },
             indent=2,
         ),

@@ -190,11 +190,7 @@ class Renderer:
                     match.group(2).strip(),
                 )
             )
-        return (
-            f'<div data-component="card-group"{style}>'
-            f"{''.join(rendered)}"
-            "</div>"
-        )
+        return f'<div data-component="card-group"{style}>{"".join(rendered)}</div>'
 
     def tabs(self, panels: list[tuple[str, str]]) -> str:
         self._tabs += 1

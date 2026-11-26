@@ -1,6 +1,6 @@
-"""Smoke-check the v2 preview served from the repository root.
+"""Smoke-check the site served from the repository root.
 
-Usage: python3 v2/check.py   (with `python3 -m http.server 8000` running)
+Usage: uv run python v2/check.py   (with `uv run python v2/dev.py` running)
 """
 
 from __future__ import annotations
@@ -10,17 +10,16 @@ import urllib.request
 
 BASE = "http://localhost:8000"
 PAGES = (
-    "/v2/site/",
-    "/v2/site/quickstart/",
-    "/v2/site/leak-safe-workflow/",
-    "/v2/site/cleaning/",
-    "/v2/site/api/",
-    "/v2/site/changelog/",
-    "/v2/site/adr/index/",
-    "/v2/site/assets/v2.css",
-    "/v2/site/assets/v2.js",
-    "/v2/site/assets/search-index.js",
-    "/site/",
+    "/",
+    "/quickstart/",
+    "/leak-safe-workflow/",
+    "/cleaning/",
+    "/api/",
+    "/changelog/",
+    "/adr/",
+    "/assets/v2.css",
+    "/assets/v2.js",
+    "/assets/search-index.js",
 )
 
 failures = 0

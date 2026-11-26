@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>v2 layout audit</title>
+<title>layout audit</title>
 <style>
   html,body{margin:0;background:#fff}
   iframe{display:block;width:1440px;height:900px;border:0}
@@ -10,11 +10,11 @@
 </style>
 </head>
 <body>
-<iframe id="f" src="/v2/quickstart/?theme=light"></iframe>
+<iframe id="f" src="/quickstart/?theme=light"></iframe>
 <pre id="out">measuring…</pre>
 <script>
   const params = new URLSearchParams(location.search);
-  const page = params.get("page") || "/v2/quickstart/";
+  const page = params.get("page") || "/quickstart/";
   const width = Number(params.get("w") || 1440);
   const theme = params.get("theme") || "light";
   const frame = document.getElementById("f");
