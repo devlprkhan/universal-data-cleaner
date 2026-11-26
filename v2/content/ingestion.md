@@ -56,11 +56,11 @@ Excel support is optional so the core install stays dependency-light. Install th
 extra, which adds `openpyxl` for `.xlsx` and `.xlsm` files:
 
 ```bash
-$ pip install "universal-data-cleaner[excel]"
+pip install "universal-data-cleaner[excel]"
 
 
 ```bash
-$ uv add "universal-data-cleaner[excel]"
+uv add "universal-data-cleaner[excel]"
 
 
 Then use the same contract with `read_excel_safe()`:
@@ -183,7 +183,7 @@ file order, and keeps the first chunk's column table and sheet label. Pass
 Parquet ingestion is optional and requires PyArrow:
 
 ```bash
-$ pip install "universal-data-cleaner[parquet]"
+pip install "universal-data-cleaner[parquet]"
 ```
 
 ```python

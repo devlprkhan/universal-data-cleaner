@@ -185,11 +185,11 @@ if report.has_warnings:
 In a deploy or scheduled job, run the CLI and let the exit code gate the batch:
 
 ```bash
-$ python -m data_cleaner audit incoming.csv \
-$   --cleaner artifacts/data_cleaner.joblib \
-$   --format json \
-$   --output artifacts/audit.json \
-$   --fail-on-warning
+python -m data_cleaner audit incoming.csv \
+  --cleaner artifacts/data_cleaner.joblib \
+  --format json \
+  --output artifacts/audit.json \
+  --fail-on-warning
 ```
 
 `0` means the batch passed, `1` means error findings (or warnings with
@@ -281,26 +281,26 @@ the `publish.yml` workflow with GitHub OIDC. Verify a downloaded package against
 the source repository:
 
 ```bash
-$ uvx "pypi-attestations==0.0.31" verify pypi \
-$   --repository https://github.com/devlprkhan/universal-data-cleaner \
-$   pypi:universal_data_cleaner-<version>-py3-none-any.whl
+uvx "pypi-attestations==0.0.31" verify pypi \
+  --repository https://github.com/devlprkhan/universal-data-cleaner \
+  pypi:universal_data_cleaner-<version>-py3-none-any.whl
 ```
 
 GitHub also stores a build-provenance attestation for the same artifacts under
 the repository's **Attestations** tab. Check it with the GitHub CLI:
 
 ```bash
-$ gh attestation verify universal_data_cleaner-<version>-py3-none-any.whl \
-$   --repo devlprkhan/universal-data-cleaner
+gh attestation verify universal_data_cleaner-<version>-py3-none-any.whl \
+  --repo devlprkhan/universal-data-cleaner
 ```
 
 Repeat both commands for the `.tar.gz` source distribution. Then confirm a clean
 install from PyPI works:
 
 ```bash
-$ uv venv /tmp/udc-check
-$ uv pip install --python /tmp/udc-check/bin/python universal-data-cleaner==<version>
-$ /tmp/udc-check/bin/data-cleaner --version
+uv venv /tmp/udc-check
+uv pip install --python /tmp/udc-check/bin/python universal-data-cleaner==<version>
+/tmp/udc-check/bin/data-cleaner --version
 ```Publishing uses PyPI Trusted Publishing, so no long-lived PyPI token is stored in
 the repository. The workflow refuses to publish if the `.publish.attestation`
 files are missing.
