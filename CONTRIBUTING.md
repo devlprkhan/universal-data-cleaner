@@ -32,8 +32,8 @@ Direct pushes to `main` are restricted; all changes go through a pull request.
 
 The [roadmap](ROADMAP.md) is the working plan. Each release is scoped to one
 theme, with a frozen checklist and explicit exit criteria.
-[ADR 0001](docs/adr/0001-production-hardening-strategy.md) records the decision to
-harden existing behaviour before adding new data primitives.
+[ADR 0001](v2/content/adr/0001-production-hardening-strategy.md) records the
+decision to harden existing behaviour before adding new data primitives.
 
 Before starting work:
 
@@ -41,7 +41,7 @@ Before starting work:
 2. Open or update the version tracking issue.
 3. Keep the pull request focused on the scoped item, its tests, and its
    documentation.
-4. Add an ADR under `docs/adr/` when a change affects the public API, a
+4. Add an ADR under `v2/content/adr/` when a change affects the public API, a
    documented default, safety guarantees, serialization, or the release process.
 5. Do not pull work from a later phase into the current release to make it look
    complete.
@@ -72,15 +72,16 @@ auto-approves permission prompts.
 
 ## Documentation
 
-The documentation site is built with MkDocs Material from `docs/`.
+The documentation website lives in `v2/` and is built by a small Python
+generator. Its source is `v2/content/`; the theme and pipeline are beside it.
 
 ```bash
 uv sync --group docs
-uv run --group docs mkdocs serve
-uv run --group docs mkdocs build --strict
+uv run python v2/dev.py      # live preview at http://localhost:8000/
+uv run python v2/build.py    # write site/ once
 ```
 
-CI builds the docs on every pull request. Pushes to `main` deploy the site to
+CI builds the site on every pull request. Pushes to `main` deploy `site/` to
 GitHub Pages.
 
 ## Before opening a pull request
@@ -91,7 +92,7 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest
 uv build
-uv run --group docs mkdocs build --strict  # when docs change
+uv run python v2/build.py                  # when docs change
 ```
 
 Please keep changes focused and include tests for new cleaning behavior.

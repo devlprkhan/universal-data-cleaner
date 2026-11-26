@@ -176,12 +176,12 @@ uv run pytest
 uv build
 ```
 
-Build or preview the docs:
+Build or preview the documentation website:
 
 ```bash
 uv sync --group docs
-uv run --group docs mkdocs serve
-uv run --group docs mkdocs build --strict
+uv run python v2/dev.py      # live preview at http://localhost:8000/
+uv run python v2/build.py    # write site/ once
 ```
 
 The reference notebook is `Universal_Data_Cleaner.ipynb`. Open it with:
@@ -195,8 +195,8 @@ uv run jupyter lab Universal_Data_Cleaner.ipynb
 ```text
 src/data_cleaner/                  # typed, pip-installable package
 tests/                             # unit and integration tests
-docs/                              # MkDocs guides, API page, and assets
-mkdocs.yml                         # documentation site configuration
+v2/                                # documentation website source and generator
+site/                              # generated website (gitignored)
 Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
 pyproject.toml                     # package metadata and tooling
 uv.lock                            # reproducible dependency lock

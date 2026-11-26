@@ -237,8 +237,8 @@ jobs:
       - name: Install documentation dependencies
         run: uv sync --group docs
 
-      - name: Build documentation
-        run: uv run --group docs mkdocs build --strict
+      - name: Build the documentation website
+        run: uv run python v2/build.py
 
   benchmark:
     name: benchmark smoke

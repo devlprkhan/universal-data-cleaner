@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>layout audit</title>
+<style>
+  html,body{margin:0;background:#fff}
+  iframe{display:block;width:1440px;height:900px;border:0}
+  pre{font:12px/1.55 monospace;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<iframe id="f" src="/quickstart/?theme=light"></iframe>
+<pre id="out">measuring…</pre>
+<script>
+  const params = new URLSearchParams(location.search);
+  const page = params.get("page") || "/quickstart/";
+  const width = Number(params.get("w") || 1440);
+  const theme = params.get("theme") || "light";
+  const frame = document.getElementById("f");
+  frame.style.width = width + "px";
+  frame.src = page + (page.includes("?") ? "&" : "?") + "theme=" + theme;
+
+  const round = (n) => Math.round(n * 100) / 100;
+
+  frame.onload = () => {
+    try {
+    const d = frame.contentDocument;
+    const win = frame.contentWindow;
+    const css = (el, pseudo) => win.getComputedStyle(el, pseudo);
+    const $ = (sel) => d.querySelector(sel);
+    const $$ = (sel) => Array.from(d.querySelectorAll(sel));
+    const visible = (el) => el && el.offsetParent !== null && el.getBoundingClientRect().height > 0;
+    const box = (sel) => {
+      const el = typeof sel === "string" ? $(sel) : sel;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { top: round(r.top), left: round(r.left), w: round(r.width), h: round(r.height) };
+    };
+    const lines = [];
+    const check = (name, ok, detail) =>
+      lines.push(`${ok ? "PASS" : "FAIL"}  ${name.padEnd(48)} ${detail ?? ""}`);
+    const note = (name, detail) => lines.push(`      ${name.padEnd(48)} ${detail ?? ""}`);
+
+    const rootStyle = css(d.documentElement);
+    const contentTop = 84;
+    lines.push(`page ${page}   viewport ${win.innerWidth}×${win.innerHeight}   theme ${theme}`);
+    lines.push("");
+
+    // ── the content line ──
+    const h1 = box('[data-component="docs-article"] h1');
+    check("h1 cap on the content line", h1 && Math.abs(h1.top - contentTop) < 0.6, `top ${h1?.top}`);
+
+    const navRow = $('[data-component="docs-nav"] li a');
+    const navCap = navRow ? box(navRow).top + 10.12 : null;
+    check(
+      "nav first row cap on the content line",
+      navCap !== null && Math.abs(navCap - contentTop) < 0.7,
+      `cap ≈ ${round(navCap)}`
+    );
+
+    // Row metrics, so the pitch can be read rather than guessed.
+    if (navRow) {
+      const dump = Array.from($$('[data-component="docs-nav"] li a')).slice(0, 4).map((a, i) => {
+        const li = a.closest("li");
+        return `#${i} a.top ${box(a).top} a.h ${box(a).h} li.top ${box(li).top} li.h ${box(li).h} ` +
+          `li.m ${css(li).marginTop} a.m ${css(a).marginBlock} a.p ${css(a).paddingBlock} ` +
+          `line ${css(a).lineHeight} font ${css(a).fontSize}`;
+      });
+      lines.push("      nav rows:");
+      dump.forEach((line) => lines.push(`        ${line}`));
+    }
+
+    const search = box('[data-component="docs-aside"] [data-slot="search"]');
+    check("rail search on the content line", search && Math.abs(search.top - contentTop) < 1.2, `top ${search?.top}`);
+    const railHead = box('[data-component="on-this-page"] [data-slot="heading"]');
+    check(
+      "rail heading sits 2rem under search",
+      railHead && search && Math.abs(railHead.top - (search.top + 36 + 32)) < 2.5,
+      `top ${railHead?.top}`
+    );
+
+    // ── brackets ──
+    const box0 = navRow && navRow.querySelector('[data-slot="box"]');
+    const idleFill = $('[data-component="docs-nav"] a:not([aria-current="page"]) [data-slot="fill"]');
+    const idleRow = idleFill && idleFill.closest("a");
+    const fill0 = idleFill || (box0 && box0.querySelector('[data-slot="fill"]'));
+    check("the bracket cell holds one pair", box0 && box0.textContent === "[]", `cell ${JSON.stringify(box0?.textContent)}`);
+    check("the dash is 2ch so labels never move", fill0 && Math.abs(box(fill0).w - 2 * (box(fill0).w / 2)) < 0.1,
+      `fill ${box(fill0)?.w}px`);
+    const current = $('[data-component="docs-nav"] a[aria-current="page"]');
+    const currentFill = current && current.querySelector('[data-slot="fill"]');
+    check("an idle row hides its dash",
+      fill0 && css(fill0, "::before").opacity === "0",
+      `idle row ${idleRow ? `"${idleRow.textContent.trim().slice(0, 18)}"` : "(none on this page)"} ` +
+        `opacity ${fill0 && css(fill0, "::before").opacity}`);
+    check("the current row shows its dash",
+      currentFill && css(currentFill, "::before").opacity === "1",
+      `opacity ${currentFill && css(currentFill, "::before").opacity}`);
+    check("the dash is a drawn bar, not text",
+      currentFill && css(currentFill, "::before").width !== "auto" && fill0.textContent === "",
+      `bar ${currentFill && css(currentFill, "::before").width} × ${currentFill && css(currentFill, "::before").height}`);
+    const toggleFill = $('[data-slot="section-toggle"] [data-slot="fill"]');
+    check("the sticky row shows its dash too", toggleFill && css(toggleFill, "::before").opacity === "1",
+      `opacity ${toggleFill && css(toggleFill, "::before").opacity}`);
+    // The bearing sits between the group's edge and the bracket's ink; the title carries it
+    // as a margin, so the two first letters land on the same edge.
+    const sidePad = css($('[data-component="sidebar"]')).paddingInlineStart;
+    const titleEl = $('[data-component="docs-nav"] [data-slot="group-title"]');
+    const titleGap = titleEl ? box(titleEl) : null;
+    const bracketLeft = box0 ? box(box0).left : null;
+    check("group titles share the brackets' left edge",
+      titleGap && bracketLeft !== null && Math.abs(titleGap.left - (bracketLeft + 2.31)) < 1.2,
+      `title ${titleGap && titleGap.left} vs bracket ink ≈ ${bracketLeft && round(bracketLeft + 2.31)} (sidebar pad ${sidePad})`);
+
+    // ── nav rows ──
+    const guideRows = $$('[data-component="docs-nav"] [data-slot="group"]')[2]?.querySelectorAll("li a") || [];
+    const guideTops = Array.from(guideRows).slice(0, 4).map((a) => box(a).top);
+    const pitches = guideTops.slice(1).map((t, i) => round(t - guideTops[i]));
+    check("nav rows sit on a 30px pitch", pitches.length && pitches.every((p) => Math.abs(p - 30) < 0.6),
+      pitches.join(", "));
+    // A long label ellipsises inside the sidebar instead of bleeding into the article;
+    // with the labels short enough, none should need to.
+    const clippedLabels = $$('[data-component="docs-nav"] a [data-slot="label"]').filter(
+      (label) => label.scrollWidth > label.clientWidth + 1
+    );
+    const navBoxWidth = box("[data-component=\"docs-nav\"]");
+    const sidebarEl = $('[data-component="sidebar"]');
+    const sidebarInner = box(sidebarEl);
+    const padLeft = parseFloat(css(sidebarEl).paddingInlineStart);
+    const padRight = parseFloat(css(sidebarEl).paddingInlineEnd);
+    check("nav labels fit the sidebar, clipped if ever needed",
+      Math.abs(navBoxWidth.w + padLeft + padRight - sidebarInner.w) < 1.5,
+      `${clippedLabels.length} clipped of ${$$('[data-component="docs-nav"] a').length}  ` +
+        `nav ${navBoxWidth.w} + ${round(padLeft)}/${round(padRight)} vs sidebar ${sidebarInner.w}`);
+
+    // ── the rail ──
+    const railLinks = $$('[data-component="on-this-page"] li a');
+    const wrapped = railLinks.filter((a) => box(a).h > 31).map((a) => a.textContent.trim());
+    check("rail items stay on one line", wrapped.length === 0, wrapped.length ? wrapped.join(" | ") : "");
+    const clipped = railLinks.filter((a) => a.scrollWidth > a.clientWidth + 1).length;
+    note("rail items clipped with an ellipsis", `${clipped} of ${railLinks.length}`);
+    check("rail gutter is 14px", railLinks[0] && css(railLinks[0]).paddingInlineStart === "14px",
+      railLinks[0] && css(railLinks[0]).paddingInlineStart);
+    const currentRail = $('[data-component="on-this-page"] a[aria-current]');
+    check("the rail marks its section with aria-current=location",
+      currentRail && currentRail.getAttribute("aria-current") === "location",
+      currentRail && currentRail.getAttribute("aria-current"));
+    check("the rail's pipe is 2px", currentRail && css(currentRail, "::before").width === "2px",
+      currentRail && css(currentRail, "::before").width);
+
+    // ── the article ──
+    const fsRead = parseFloat(rootStyle.getPropertyValue("--fs-read"));
+    const para = $('[data-component="docs-article"] p:not(.lead)');
+    const columnBox = box('[data-component="docs-article"]');
+    const expectedMeasure = Math.min(42 * fsRead, columnBox.w);
+    check("prose measure is 42 reading ems, or the column when narrower",
+      para && Math.abs(box(para).w - expectedMeasure) < 3,
+      `${box(para)?.w}px (expect ${round(expectedMeasure)} = min(42 × ${fsRead}, column ${columnBox.w}))`);
+
+    const frameEl = $$('[data-component="docs-article"] > [data-component="code-frame"]').find(visible);
+    const articleBox = box('[data-component="docs-article"]');
+    if (frameEl) {
+      check("a code frame takes the full column",
+        Math.abs(box(frameEl).w - articleBox.w) < 2.5,
+        `${box(frameEl).w} vs column ${articleBox.w}`);
+      const head = frameEl.querySelector('[data-slot="code-head"]');
+      check("the frame's header is 2.5rem", head && Math.abs(box(head).h - 40) < 0.6, `h ${head && box(head).h}`);
+    } else {
+      note("code frame", "none outside a tab set on this page");
+    }
+    const tabsHead = $('[data-component="code-tabs"] [data-slot="head"]');
+    if (tabsHead) {
+      check("the tab set's header is 2.5rem", Math.abs(box(tabsHead).h - 40) < 0.6, `h ${box(tabsHead).h}`);
+      const tabsCopy = tabsHead.querySelector('[data-slot="copy"]');
+      check("the tab set carries one Copy at its end",
+        tabsCopy && Math.abs(box(tabsCopy).left + box(tabsCopy).w - (box(tabsHead).left + box(tabsHead).w)) < 2,
+        tabsCopy ? `right edge ${round(box(tabsCopy).left + box(tabsCopy).w)}` : "no Copy");
+    }
+
+    // ── syntax highlighting actually applied ──
+    const frames = $$('[data-component="code-frame"]').filter(visible);
+    let best = { count: 0, detail: "no visible frame", variant: "-" };
+    frames.forEach((frame) => {
+      const inks = new Set();
+      const detail = [];
+      Array.from(frame.querySelectorAll("pre code span")).forEach((span) => {
+        const colour = css(span).color;
+        inks.add(colour);
+        if (detail.length < 5) detail.push(`${span.className || span.dataset.token || "·"}=${colour}`);
+      });
+      Array.from(frame.querySelectorAll("[data-token]")).forEach((span) => {
+        const colour = css(span).color;
+        inks.add(colour);
+        if (detail.length < 5) detail.push(`${span.dataset.token}=${colour}`);
+      });
+      if (inks.size > best.count) {
+        best = { count: inks.size, detail: detail.join("  "), variant: frame.dataset.variant };
+      }
+    });
+    check("code tokens take their own ink", frames.length === 0 || best.count >= 2,
+      frames.length === 0 ? "no code frame on this page" : `${best.variant}: ${best.count} inks — ${best.detail}`);
+
+    // ── tables ──
+    const rows = $$('[data-component="docs-article"] tbody tr');
+    const th = $('[data-component="docs-article"] th');
+    const td = rows[1] && rows[1].querySelector("td");
+    if (th && td) {
+      check("the table's head and cells share a 1px grid",
+        css(th).borderTopWidth === "1px" && css(td).borderTopWidth === "1px",
+        `th ${css(th).borderTopWidth}  td ${css(td).borderTopWidth}`);
+      note("table head surface", css(th).backgroundColor);
+      check("the header is mono, micro, uppercase",
+        css(th).textTransform === "uppercase" && css(th).fontFamily.toLowerCase().includes("mono"),
+        `${css(th).fontSize} ${css(th).textTransform}`);
+      check("body rows are ruled apart", css(td).borderTopStyle === "solid" && css(td).borderTopWidth !== "0px",
+        `${css(td).borderTopWidth} ${css(td).borderTopColor}`);
+    } else {
+      note("table", "no table on this page");
+    }
+
+    // ── copy as markdown / edit link ──
+    const copyButton = $('[data-copy-markdown]');
+    check("no Edit this page link", !$('[data-component="edit-link"] a'), $('[data-component="edit-link"] a') ? "present" : "");
+    if (copyButton) {
+      const r = box(copyButton);
+      check("Copy as Markdown sits at the article's end", r && Math.abs(r.left + r.w - (articleBox.left + articleBox.w)) < 40,
+        `right edge ${round(r.left + r.w)} vs ${articleBox.left + articleBox.w}`);
+    }
+
+    // ── the footer, on the shell's columns ──
+    const side = box('[data-component="sidebar"]');
+    const aside = box('[data-component="aside"]');
+    const navListEl = $('[data-component="secondary-nav"] ul');
+    const navList = box(navListEl);
+    const navLinkBox = box('[data-component="secondary-nav"] a [data-slot="box"]');
+    const navInk = box('[data-component="docs-nav"] [data-slot="box"]');
+    check("footer lists line up with the sidebar's brackets",
+      navLinkBox && navInk && Math.abs(navLinkBox.left - navInk.left) < 1.5,
+      `footer ${navLinkBox?.left} vs sidebar ${navInk?.left}`);
+    const wordmark = box('[data-component="wordmark"]');
+    check("the wordmark sits at the article's reading edge",
+      wordmark && Math.abs(wordmark.left - articleBox.left) < 1.5,
+      `${wordmark?.left} vs article ${articleBox.left}`);
+    const toggle = $('[data-component="site-footer"] [data-component="theme-toggle"]');
+    const footerBox = box('[data-component="site-footer"]');
+    check("the theme control starts the footer's left column",
+      toggle && navLinkBox && Math.abs(box(toggle).left - navLinkBox.left) < 1.5,
+      toggle ? `${round(box(toggle).left)} vs ${navLinkBox.left}` : "no toggle");
+    note("the footer's box", `top ${footerBox?.top}  height ${footerBox?.h}  width ${footerBox?.w}`);
+    note("the wordmark's box", `top ${wordmark?.top}  height ${wordmark?.h}  width ${wordmark?.w}`);
+    const credit = $('[data-slot="copyright"]');
+    check("the credit names the maker", credit && /Haseeb Khan/.test(credit.textContent),
+      credit && credit.textContent.trim());
+    check("footer lists are stacks, not a wrapping row",
+      navListEl && css(navListEl).flexDirection === "column", navListEl && css(navListEl).flexDirection);
+
+    // ── brand ink ──
+    const link = $('[data-component="docs-article"] a');
+    note("prose link ink", link && `${css(link).color}, rule ${css(link).textDecorationColor}`);
+    note("focus ring ink", css(d.body).getPropertyValue("--link").trim());
+    const brandCells = d.querySelector(".brand-cells");
+    note("brand", `cells ${brandCells ? css(brandCells).fill : "?"}  accent ${rootStyle.getPropertyValue("--brand-accent").trim()}`);
+
+    // ── shell columns ──
+    lines.push("");
+    note("columns", `sidebar ${side.w} @${side.left}   article ${articleBox.w} @${articleBox.left}   aside ${aside.w} @${aside.left}`);
+    check("article gives up 72px before the rail",
+      Math.abs((aside.left - articleBox.left - articleBox.w) - 72) < 0.8,
+      `${aside.left - articleBox.left - articleBox.w}px`);
+
+    document.getElementById("out").textContent = lines.join("\n");
+    } catch (error) {
+      document.getElementById("out").textContent =
+        "AUDIT ERROR\n" + (error && error.stack ? error.stack : String(error));
+    }
+  };
+</script>
+</body>
+</html>
