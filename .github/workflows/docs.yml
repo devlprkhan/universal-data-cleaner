@@ -4,14 +4,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "v2/**"
+      - "docs/**"
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
-      - "v2/**"
+      - "docs/**"
       - "src/**"
       - "pyproject.toml"
       - "uv.lock"
@@ -43,7 +43,7 @@ jobs:
         run: uv sync --group docs
 
       - name: Build the documentation website
-        run: uv run python v2/build.py
+        run: uv run python docs/build.py
 
       - name: Check the built site
         run: |

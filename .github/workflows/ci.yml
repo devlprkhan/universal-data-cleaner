@@ -238,7 +238,7 @@ jobs:
         run: uv sync --group docs
 
       - name: Build the documentation website
-        run: uv run python v2/build.py
+        run: uv run python docs/build.py
 
   benchmark:
     name: benchmark smoke

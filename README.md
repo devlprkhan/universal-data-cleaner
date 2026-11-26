@@ -180,8 +180,8 @@ Build or preview the documentation website:
 
 ```bash
 uv sync --group docs
-uv run python v2/dev.py      # live preview at http://localhost:8000/
-uv run python v2/build.py    # write site/ once
+uv run python docs/dev.py      # live preview at http://localhost:8000/
+uv run python docs/build.py    # write site/ once
 ```
 
 The reference notebook is `Universal_Data_Cleaner.ipynb`. Open it with:
@@ -195,7 +195,7 @@ uv run jupyter lab Universal_Data_Cleaner.ipynb
 ```text
 src/data_cleaner/                  # typed, pip-installable package
 tests/                             # unit and integration tests
-v2/                                # documentation website source and generator
+docs/                                # documentation website source and generator
 site/                              # generated website (gitignored)
 Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
 pyproject.toml                     # package metadata and tooling

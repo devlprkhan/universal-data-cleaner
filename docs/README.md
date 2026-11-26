@@ -6,19 +6,19 @@ generator: Markdown in `content/`, a Python pipeline, and a hand-written theme.
 The layout and rules are documented in **[`STYLEGUIDE.md`](STYLEGUIDE.md)**.
 
 ```bash
-uv run python v2/dev.py             # rebuild on change + serve at localhost:8000
-uv run python v2/build.py           # build site/ once
+uv run python docs/dev.py             # rebuild on change + serve at localhost:8000
+uv run python docs/build.py           # build site/ once
 ```
 
 `dev.py` watches `content/`, `theme/`, `pipeline/`, `nav.py` and `build.py`,
 rebuilds on every save, serves the built site at <http://localhost:8000/>, and
-reloads the page after a rebuild. CI runs `v2/build.py` and publishes `site/` to
+reloads the page after a rebuild. CI runs `docs/build.py` and publishes `site/` to
 GitHub Pages.
 
 ## Layout
 
 ```
-v2/
+docs/
   STYLEGUIDE.md          the rules and the measured numbers
   nav.py                 the nav manifest: sidebar order, pager, search, llms/sitemap
   dev.py                 rebuild on change + local server with live reload
@@ -64,7 +64,7 @@ Query parameters: `page` (path under the server), `w` (viewport width), `theme`.
 1. Add the Markdown file under `content/` (a folder landing page is
    `content/<folder>/index.md`).
 2. Add an `Item` to the `DOCS` section in `nav.py`; the path is the URL.
-3. Run `uv run python v2/build.py` and commit the source changes. The build
+3. Run `uv run python docs/build.py` and commit the source changes. The build
    checks links, fragments, asset paths, reserved names, and size budgets.
 
 The API page is generated from the package docstrings by `pipeline/api.py`, so

@@ -1,6 +1,6 @@
 """Smoke-check the site served from the repository root.
 
-Usage: uv run python v2/check.py   (with `uv run python v2/dev.py` running)
+Usage: uv run python docs/check.py   (with `uv run python docs/dev.py` running)
 """
 
 from __future__ import annotations

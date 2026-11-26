@@ -483,7 +483,7 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest
 uv build
-uv run python v2/build.py
+uv run python docs/build.py
 ```
 
 Plus, where applicable:
