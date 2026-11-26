@@ -1111,8 +1111,6 @@ input {
   max-width: 100%;
   margin: 0 0 1.5rem;
   border-collapse: collapse;
-  display: block;
-  overflow-x: auto;
   line-height: 1.5;
   text-align: start;
 }
@@ -1125,7 +1123,7 @@ input {
   border: 1px solid var(--border);
   text-align: start;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 [data-component="docs-article"] th {

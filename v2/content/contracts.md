@@ -180,7 +180,7 @@ restored = DataContract.from_json(payload)
 YAML support is optional and requires `pyyaml`:
 
 ```bash
-$ pip install pyyaml
+pip install pyyaml
 ```
 
 ```python

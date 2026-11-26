@@ -10,21 +10,21 @@ description: "The distribution is universal-data-cleaner; the import is data_cle
 === "pip"
 
     ```bash
-    $ pip install universal-data-cleaner
+    pip install universal-data-cleaner
 
 
 === "uv"
 
     ```bash
-    $ uv add universal-data-cleaner
+    uv add universal-data-cleaner
 
 
 === "From source"
 
     ```bash
-    $ git clone https://github.com/devlprkhan/universal-data-cleaner.git
-    $ cd universal-data-cleaner
-    $ uv sync
+    git clone https://github.com/devlprkhan/universal-data-cleaner.git
+    cd universal-data-cleaner
+    uv sync
 
 
 The distribution is `universal-data-cleaner`; the import is `data_cleaner`.
@@ -200,7 +200,7 @@ report.raise_if_failed("Batch rejected")
 The same report is available from the terminal:
 
 ```bash
-$ python -m data_cleaner audit incoming.csv --contract artifacts/contract.json
+python -m data_cleaner audit incoming.csv --contract artifacts/contract.json
 ```
 
 Set `--fail-on-warning` to fail the command on warnings and use the exit code in

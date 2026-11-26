@@ -29,15 +29,15 @@ in-memory size of the input frame.
 ## How to reproduce
 
 ```bash
-$ uv sync --dev
-$ uv run python benchmarks/run_benchmarks.py --output benchmarks/results/local.json
+uv sync --dev
+uv run python benchmarks/run_benchmarks.py --output benchmarks/results/local.json
 ```
 
 Use `--quick` for a 10K-row smoke run, or `--shape` and `--rows` to run a
 subset:
 
 ```bash
-$ uv run python benchmarks/run_benchmarks.py --shape narrow --rows 100000 1000000
+uv run python benchmarks/run_benchmarks.py --shape narrow --rows 100000 1000000
 ```The workload generator is seeded and vectorized, so the same command produces
 the same data on every machine. Results are only comparable on the same hardware
 and dependency versions; the JSON records both.
