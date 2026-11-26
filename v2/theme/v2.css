@@ -541,7 +541,6 @@ input {
   color: var(--text);
   padding-block: var(--content-top) 4rem;
   min-width: 0;
-  overflow-x: auto;
 }
 
 [data-component="docs-article"] :is(h1, h2, h3, h4, h5, h6) {
@@ -1106,8 +1105,10 @@ input {
 
 [data-component="docs-article"] table {
   width: 100%;
+  max-width: 100%;
   margin: 0 0 1.5rem;
   border-collapse: collapse;
+  table-layout: fixed;
   line-height: 1.5;
   text-align: start;
 }
@@ -1120,6 +1121,8 @@ input {
   border: 1px solid var(--border);
   text-align: start;
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 [data-component="docs-article"] th {

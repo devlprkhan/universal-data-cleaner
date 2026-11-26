@@ -503,6 +503,13 @@
     }
   }
 
+  /* Keep the sidebar's current page visible when the nav list is taller than the
+     viewport, so the left rail stays in step with where the reader is. */
+  const activeNav = document.querySelector('[data-component="docs-nav"] a[aria-current="page"]');
+  if (activeNav) {
+    requestAnimationFrame(() => activeNav.scrollIntoView({ block: "nearest", behavior: "auto" }));
+  }
+
   if (reduceMotion.matches) {
     document.documentElement.dataset.reducedMotion = "true";
   }
