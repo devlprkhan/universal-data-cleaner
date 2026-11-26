@@ -184,12 +184,6 @@ uv run python docs/dev.py      # live preview at http://localhost:8000/
 uv run python docs/build.py    # write site/ once
 ```
 
-The reference notebook is `Universal_Data_Cleaner.ipynb`. Open it with:
-
-```bash
-uv run jupyter lab Universal_Data_Cleaner.ipynb
-```
-
 ## Project layout
 
 ```text
@@ -197,7 +191,6 @@ src/data_cleaner/                  # typed, pip-installable package
 tests/                             # unit and integration tests
 docs/                                # documentation website source and generator
 site/                              # generated website (gitignored)
-Universal_Data_Cleaner.ipynb       # end-to-end reference workflow
 pyproject.toml                     # package metadata and tooling
 uv.lock                            # reproducible dependency lock
 CHANGELOG.md                       # release notes
